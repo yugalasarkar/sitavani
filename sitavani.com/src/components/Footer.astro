@@ -1,0 +1,68 @@
+---
+interface Props {
+  language?: 'en' | 'hi' | 'dual';
+}
+
+const { language = 'dual' } = Astro.props;
+---
+
+<footer class="bg-[#050609] border-t border-amber-950/40 text-slate-400 py-12 mt-auto">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-8 pb-10 border-b border-amber-950/40">
+      
+      <div class="md:col-span-2 space-y-3">
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          <span class="font-brand font-bold text-slate-200 tracking-wider text-base">
+            SITAVANI <span class="text-amber-500 font-normal">|</span> सीतावाणी
+          </span>
+        </div>
+        <p class="text-xs text-slate-400 leading-relaxed max-w-md font-sans">
+          {language === 'hi' 
+            ? 'धर्म पुनर्जागरण का संप्रभु समाचार मंच। मंदिर पुनरुद्धार, पुरातत्व, स्वदेशी रक्षा एवं भारतीय ज्ञान परंपरा की सत्यापित सूचना प्रणाली।'
+            : 'Sovereign intelligence wire documenting positive milestones of the Dharmic Renaissance. Human-in-the-loop editorial verification across heritage, defense, and sciences.'}
+        </p>
+        <div class="text-[11px] font-mono text-slate-500">
+          Host: <code class="text-amber-400/80">sitavani.com</code> · Topology: Pure Astro SSG / SSR + Ingestion Daemon
+        </div>
+      </div>
+
+      <div>
+        <h4 class="text-xs font-mono uppercase tracking-wider text-amber-500 font-semibold mb-3">
+          {language === 'hi' ? 'स्तंभ एवं श्रेणियां' : 'Editorial Pillars'}
+        </h4>
+        <ul class="space-y-2 text-xs font-mono">
+          <li><a href="#heritage" class="hover:text-amber-400 transition-colors">Vedic & Heritage Renaissance</a></li>
+          <li><a href="#defense" class="hover:text-amber-400 transition-colors">Sovereign & Superpower Bharat</a></li>
+          <li><a href="#space" class="hover:text-amber-400 transition-colors">Space & High Tech (ISRO/UPI)</a></li>
+          <li><a href="#governance" class="hover:text-amber-400 transition-colors">Sovereign Policy & Security</a></li>
+          <li><a href="#facts" class="hover:text-amber-400 transition-colors">Fact vs Myth: Bharat Narrative</a></li>
+        </ul>
+      </div>
+
+      <div>
+        <h4 class="text-xs font-mono uppercase tracking-wider text-amber-500 font-semibold mb-3">
+          {language === 'hi' ? 'संप्रभु वास्तुकला' : 'Sovereign Protocol'}
+        </h4>
+        <ul class="space-y-2 text-xs font-mono text-slate-400">
+          <li>● Pure Astro Engine (Zero React Payload)</li>
+          <li>● SHA-256 Cryptographic Deduplication</li>
+          <li>● IPFS Decentralised Web3 Ready</li>
+          <li>● Human-in-the-Loop Editorial Verification</li>
+        </ul>
+      </div>
+
+    </div>
+
+    <div class="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-mono text-slate-500">
+      <div>
+        © 2026 SITAVANI Sovereign Wire (sitavani.com). All rights reserved.
+      </div>
+      <div class="flex items-center gap-4">
+        <span>Yugala Sovereign Infrastructure</span>
+        <span>·</span>
+        <span>Zero Slop Compliance</span>
+      </div>
+    </div>
+  </div>
+</footer>

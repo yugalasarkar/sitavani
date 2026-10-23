@@ -1,0 +1,6 @@
+{
+  "name": "SITAVANI | सीतावाणी — Dharmic Renaissance News Wire & Sovereign Editorial Desk",
+  "description": "Sovereign intelligence, verification desk, and news pipeline curating positive dispatches of the Dharmic Renaissance across heritage, mandir revival, defense, science, and Sanskrit revival.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

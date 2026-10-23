@@ -1,0 +1,98 @@
+---
+import { BharatShaktiMetric } from '../types';
+
+export const BHARAT_SHAKTI_METRICS: BharatShaktiMetric[] = [
+  {
+    id: 'upi-pulse',
+    label: 'UPI Real-Time Payments',
+    label_hi: 'यूपीआई दैनिक डिजिटल भुगतान',
+    value: '542M',
+    change: '+18.4%',
+    unit: 'txns / day',
+    trend: 'up',
+    icon: '⚡'
+  },
+  {
+    id: 'defense-pulse',
+    label: 'Atmanirbhar Defense Production',
+    label_hi: 'स्वदेशी रक्षा उत्पादन सूचकांक',
+    value: '76.8%',
+    change: '+5.2%',
+    unit: 'indigenous content',
+    trend: 'up',
+    icon: '🛡️'
+  },
+  {
+    id: 'heritage-pulse',
+    label: 'Active Cultural Corridors',
+    label_hi: 'सक्रिय मंदिर एवं सांस्कृतिक मर्डर',
+    value: '108',
+    change: '12 states',
+    unit: 'sanctums restored',
+    trend: 'stable',
+    icon: '🕉️'
+  },
+  {
+    id: 'gdp-pulse',
+    label: 'Real GDP Annual Pulse',
+    label_hi: 'वास्तविक सकल घरेलू उत्पाद (GDP)',
+    value: '8.2%',
+    change: '#1 globally',
+    unit: 'fastest major economy',
+    trend: 'up',
+    icon: '📈'
+  },
+  {
+    id: 'space-pulse',
+    label: 'ISRO Commercial Missions',
+    label_hi: 'इसरो वाणिज्यिक उपग्रह प्रक्षेपण',
+    value: '432',
+    change: '36 nations',
+    unit: 'payloads delivered',
+    trend: 'up',
+    icon: '🚀'
+  }
+];
+
+interface Props {
+  language?: 'en' | 'hi' | 'dual';
+}
+
+const { language = 'dual' } = Astro.props;
+---
+
+<div class="bg-[#090C12] border-b border-amber-950/40 text-xs font-mono py-2.5 overflow-x-auto selection:bg-amber-500/20">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-6 min-w-max">
+    
+    <div class="flex items-center gap-2 pr-4 border-r border-amber-900/30">
+      <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+      <span class="font-brand font-bold text-amber-400 uppercase tracking-widest text-[11px]">
+        {language === 'hi' ? 'भारत शक्ति पल्स' : 'BHARAT SHAKTI PULSE'}
+      </span>
+      <span class="text-slate-400 text-[10px] uppercase">· Live Ticker</span>
+    </div>
+
+    <div class="flex items-center gap-8">
+      {BHARAT_SHAKTI_METRICS.map((m) => (
+        <div class="flex items-center gap-2">
+          <span class="text-sm">{m.icon}</span>
+          <div>
+            <div class="text-[10px] text-slate-400 uppercase tracking-wider">
+              {language === 'hi' ? m.label_hi : m.label}
+            </div>
+            <div class="flex items-baseline gap-1.5">
+              <span class="font-bold text-amber-300 tabular-nums text-sm">{m.value}</span>
+              <span class="text-[10px] text-emerald-400 font-semibold">{m.change}</span>
+              <span class="text-[10px] text-slate-400">({m.unit})</span>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+
+    <div class="text-[10px] text-slate-400 pl-4 border-l border-amber-900/30">
+      <span class="text-emerald-400">● 2026 Live Synchronized</span>
+    </div>
+
+  </div>
+</div>

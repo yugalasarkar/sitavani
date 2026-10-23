@@ -1,0 +1,63 @@
+---
+import { CATEGORY_LABELS } from '../utils/lang';
+
+interface Props {
+  language?: 'en' | 'hi' | 'dual';
+  pendingCount?: number;
+}
+
+const { language = 'dual', pendingCount = 0 } = Astro.props;
+---
+
+<header class="sticky top-0 z-40 bg-[#07080B]/95 backdrop-blur-md border-b border-amber-950/40">
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    
+    <div class="flex items-center gap-2">
+      <a href="/" class="flex items-center gap-2 text-left group focus-visible:outline-none">
+        <span class="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 animate-pulse"></span>
+        <span class="font-brand text-lg sm:text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500">
+          SITAVANI <span class="text-amber-500/80 font-normal">|</span> सीतावाणी
+        </span>
+      </a>
+    </div>
+
+    <nav class="hidden lg:flex items-center gap-5 text-xs uppercase tracking-wider font-medium text-slate-400">
+      <a href="/" class="transition-colors hover:text-amber-400 font-semibold text-amber-400">
+        {language === 'hi' ? 'समस्त धारा' : 'Live Wire'}
+      </a>
+      <a href="#heritage" class="transition-colors hover:text-amber-400">
+        {language === 'hi' ? 'वैदिक पुनरुद्धार' : 'Vedic & Heritage'}
+      </a>
+      <a href="#defense" class="transition-colors hover:text-amber-400">
+        {language === 'hi' ? 'समर्थ भारत' : 'Sovereign Defense'}
+      </a>
+      <a href="#space" class="transition-colors hover:text-amber-400">
+        {language === 'hi' ? 'अंतरिक्ष एवं तकनीक' : 'Space & High Tech'}
+      </a>
+      <a href="#governance" class="transition-colors hover:text-amber-400">
+        {language === 'hi' ? 'संप्रभु नीति' : 'Sovereign Policy'}
+      </a>
+      <a href="#facts" class="transition-colors hover:text-amber-400">
+        {language === 'hi' ? 'सत्य तथ्य' : 'Fact vs Myth'}
+      </a>
+    </nav>
+
+    <div class="flex items-center gap-3">
+      <div class="flex items-center p-0.5 bg-[#0D1017] border border-slate-800 rounded-md text-[11px] font-medium">
+        <span class="px-2 py-1 rounded transition-colors text-slate-400 hover:text-slate-200 cursor-pointer">EN</span>
+        <span class="px-2 py-1 rounded transition-colors text-slate-400 hover:text-slate-200 font-hindi-serif cursor-pointer">हिन्दी</span>
+        <span class="px-2 py-1 rounded transition-colors bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-pointer">Dual</span>
+      </div>
+
+      <a href="/admin" class="relative flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-md border bg-[#0D1017] text-slate-300 border-amber-900/40 hover:border-amber-600/50 hover:text-amber-300 transition-all">
+        <span>Editorial Desk</span>
+        {pendingCount > 0 && (
+          <span class="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-bold text-[10px] flex items-center justify-center tabular-nums">
+            {pendingCount}
+          </span>
+        )}
+      </a>
+    </div>
+
+  </div>
+</header>

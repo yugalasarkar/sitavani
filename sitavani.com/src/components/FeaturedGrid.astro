@@ -1,0 +1,52 @@
+---
+import { Article } from '../types';
+import { CATEGORY_LABELS } from '../utils/lang';
+
+interface Props {
+  articles: Article[];
+  language?: 'en' | 'hi' | 'dual';
+}
+
+const { articles, language = 'dual' } = Astro.props;
+---
+
+<section class="mb-14">
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+    {articles.map((art) => {
+      const catLabel = CATEGORY_LABELS[art.category] || CATEGORY_LABELS['HERITAGE'];
+      return (
+        <div class="group relative cursor-pointer overflow-hidden rounded-xl border border-amber-900/30 bg-[#0A0C12] p-6 flex flex-col justify-between transition-all duration-300 hover:border-amber-500/50 hover:shadow-xl">
+          <div class="space-y-3">
+            <div class="flex items-center gap-2 text-xs font-mono text-amber-400 uppercase tracking-wide">
+              <span class="font-semibold text-amber-300">{art.source_name}</span>
+              <span aria-hidden="true" class="text-amber-700">·</span>
+              <span class="text-slate-400">{language === 'hi' ? catLabel.hi : catLabel.en}</span>
+            </div>
+
+            {(language === 'en' || language === 'dual') && (
+              <h3 class="text-xl font-serif font-bold text-slate-100 group-hover:text-amber-200 transition-colors leading-snug">
+                {art.title}
+              </h3>
+            )}
+            {(language === 'hi' || language === 'dual') && (
+              <h4 class={`font-hindi-serif font-bold text-amber-100/90 leading-snug ${language === 'dual' ? 'text-base text-amber-300/80 border-t border-amber-900/20 pt-1' : 'text-xl'}`}>
+                {art.title_hi || art.title}
+              </h4>
+            )}
+
+            <p class="text-xs sm:text-sm text-slate-300 leading-relaxed font-sans line-clamp-3">
+              {language === 'hi' ? (art.summary_hi || art.summary) : art.summary}
+            </p>
+          </div>
+
+          <div class="pt-4 mt-4 border-t border-slate-800 flex items-center justify-between">
+            <span class="text-[11px] font-mono text-slate-400">SHA-256: {art.url_hash.slice(0, 8)}...</span>
+            <span class="text-xs font-semibold uppercase tracking-wider text-amber-400 group-hover:text-amber-300">
+              {language === 'hi' ? 'विस्तृत रपट ↗' : 'Read Dispatch ↗'}
+            </span>
+          </div>
+        </div>
+      );
+    })}
+  </div>
+</section>

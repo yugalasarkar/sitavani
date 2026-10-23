@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-cinzel: 'Cinzel', serif;
+    --font-cormorant: 'Cormorant Garamond', 'Noto Serif Devanagari', serif;
+    --font-sans-deva: 'Plus Jakarta Sans', 'Noto Sans Devanagari', sans-serif;
+    --font-serif-deva: 'Noto Serif Devanagari', 'Cormorant Garamond', serif;
+  }
+
+  body {
+    font-family: var(--font-sans-deva);
+    background-color: #07080b;
+    color: #f1f5f9;
+  }
+
+  h1, h2, h3, .font-editorial {
+    font-family: var(--font-cormorant);
+  }
+
+  .font-brand {
+    font-family: var(--font-cinzel);
+  }
+
+  .font-hindi-serif {
+    font-family: var(--font-serif-deva);
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #090a0f;
+}
+::-webkit-scrollbar-thumb {
+  background: #252836;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #b45309;
+}

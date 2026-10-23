@@ -1,0 +1,65 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import BharatShaktiPulse from '../components/BharatShaktiPulse.astro';
+import DailyVedicInsight from '../components/DailyVedicInsight.astro';
+import LeadHeroStory from '../components/LeadHeroStory.astro';
+import FeaturedGrid from '../components/FeaturedGrid.astro';
+import BharatRenaissanceMap from '../components/BharatRenaissanceMap.astro';
+import FactVsMythDesk from '../components/FactVsMythDesk.astro';
+import DispatchWire from '../components/DispatchWire.astro';
+import Footer from '../components/Footer.astro';
+import { getFeed, getStats } from '../data/store';
+import type { Category } from '../types';
+
+const url = new URL(Astro.request.url);
+const selectedCategory = (url.searchParams.get('category') || 'ALL') as Category;
+const searchQuery = url.searchParams.get('search') || '';
+
+const feedData = getFeed(selectedCategory === 'ALL' ? undefined : selectedCategory, searchQuery);
+const dispatches = feedData.articles || [];
+const stats = getStats();
+
+const heroDispatch = dispatches.find((d) => d.is_featured) || dispatches[0];
+const featuredDispatches = dispatches.filter((d) => d.id !== heroDispatch?.id).slice(0, 4);
+const wireDispatches = dispatches.filter((d) => d.id !== heroDispatch?.id);
+---
+
+<Layout title="SITAVANI | सीतावाणी — Dharmic Renaissance News Wire & Sovereign Editorial Desk">
+  <div class="min-h-screen flex flex-col bg-[#07090E] text-slate-100 font-sans">
+    <Header selectedCategory={selectedCategory} searchQuery={searchQuery} stats={stats} />
+
+    <main class="flex-grow container mx-auto px-4 py-8 space-y-12 max-w-7xl">
+      <!-- Top Metrics Pulse Bar -->
+      <BharatShaktiPulse />
+
+      <!-- Hero Lead Story & Daily Vedic Insight Grid -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-2">
+          {heroDispatch ? <LeadHeroStory article={heroDispatch} /> : null}
+        </div>
+        <div class="space-y-6">
+          <DailyVedicInsight />
+        </div>
+      </div>
+
+      <!-- Featured Grid of Key Stories -->
+      <FeaturedGrid articles={featuredDispatches} />
+
+      <!-- Interactive Renaissance Map & Fact Vs Myth Verification Desk -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div class="lg:col-span-2">
+          <BharatRenaissanceMap />
+        </div>
+        <div>
+          <FactVsMythDesk />
+        </div>
+      </div>
+
+      <!-- Comprehensive Dispatch Wire Feed -->
+      <DispatchWire articles={wireDispatches} selectedCategory={selectedCategory} />
+    </main>
+
+    <Footer stats={stats} />
+  </div>
+</Layout>

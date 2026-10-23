@@ -1,0 +1,84 @@
+---
+import { Article, NewsCategory } from '../types';
+import { CATEGORY_LABELS, UI_STRINGS } from '../utils/lang';
+
+interface Props {
+  articles: Article[];
+  language?: 'en' | 'hi' | 'dual';
+  selectedCategory?: NewsCategory | 'ALL';
+}
+
+const { articles, language = 'dual', selectedCategory = 'ALL' } = Astro.props;
+---
+
+<section id="wire" class="mb-16">
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-amber-950/40 pb-4 mb-8">
+    <div>
+      <div class="flex items-center gap-2 text-xs font-mono text-amber-500 uppercase tracking-widest font-semibold mb-1">
+        <span>sitavani.com</span>
+        <span aria-hidden="true">·</span>
+        <span>{UI_STRINGS.latest_wire[language === 'hi' ? 'hi' : 'en']}</span>
+      </div>
+      <h2 class="text-2xl sm:text-3xl font-serif font-bold text-slate-100">
+        {language === 'hi' ? 'संप्रभु समाचार धारा एवं रपट' : 'Chronological Sovereign Wire'}
+      </h2>
+    </div>
+
+    <div class="text-xs font-mono text-slate-400">
+      Dispatches Count: <strong class="text-amber-400 tabular-nums">{articles.length}</strong>
+    </div>
+  </div>
+
+  <div class="space-y-4">
+    {articles.map((art) => {
+      const catLabel = CATEGORY_LABELS[art.category] || CATEGORY_LABELS['HERITAGE'];
+      const formattedDate = art.approved_at
+        ? new Date(art.approved_at).toLocaleDateString(language === 'hi' ? 'hi-IN' : 'en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          })
+        : 'Recent';
+
+      return (
+        <article class="group rounded-xl border border-amber-950/30 bg-[#090B10] p-5 transition-all duration-300 hover:border-amber-500/40 hover:bg-[#0B0E16]">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            
+            <div class="space-y-2 flex-1">
+              <div class="flex items-center flex-wrap gap-2 text-xs font-mono text-amber-400/80">
+                <span class="font-semibold text-amber-300">{art.source_name}</span>
+                <span aria-hidden="true" class="text-amber-800">·</span>
+                <span class="text-slate-400">{language === 'hi' ? catLabel.hi : catLabel.en}</span>
+                <span aria-hidden="true" class="text-amber-800">·</span>
+                <span class="text-slate-400 tabular-nums">{formattedDate}</span>
+              </div>
+
+              {(language === 'en' || language === 'dual') && (
+                <h3 class="text-lg sm:text-xl font-serif font-bold text-slate-100 group-hover:text-amber-200 transition-colors">
+                  {art.title}
+                </h3>
+              )}
+              {(language === 'hi' || language === 'dual') && (
+                <h4 class={`font-hindi-serif font-bold text-amber-100/90 ${language === 'dual' ? 'text-base text-amber-300/80' : 'text-lg sm:text-xl'}`}>
+                  {art.title_hi || art.title}
+                </h4>
+              )}
+
+              <p class="text-xs sm:text-sm text-slate-400 leading-relaxed font-sans line-clamp-2 max-w-4xl">
+                {language === 'hi' ? (art.summary_hi || art.summary) : art.summary}
+              </p>
+            </div>
+
+            <div class="flex md:flex-col items-center md:items-end justify-between md:justify-center gap-3 pt-3 md:pt-0 border-t md:border-t-0 border-slate-800/60 min-w-[140px]">
+              <span class="text-[10px] font-mono text-slate-500">SHA-256: {art.url_hash.slice(0, 8)}...</span>
+              <a href={art.original_url} target="_blank" rel="noopener noreferrer" class="text-xs font-mono uppercase tracking-wider font-semibold text-amber-400 hover:text-amber-300 flex items-center gap-1">
+                {language === 'hi' ? 'मूल स्रोत ↗' : 'Inspect Source ↗'}
+              </a>
+            </div>
+
+          </div>
+        </article>
+      );
+    })}
+  </div>
+</section>

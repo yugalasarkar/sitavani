@@ -1,0 +1,60 @@
+---
+import '../index.css';
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const {
+  title = "SITAVANI | सीतावाणी — Dharmic Renaissance News Wire & Sovereign Editorial Desk",
+  description = "Sovereign intelligence, verification desk, and news pipeline curating positive dispatches of the Dharmic Renaissance across heritage, mandir revival, defense, science, and Sanskrit revival."
+} = Astro.props;
+
+const jsonLdSchema = JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "NewsMediaOrganization",
+  "name": "SITAVANI | सीतावाणी",
+  "url": "https://sitavani.com",
+  "description": description,
+  "potentialAction": {
+    "@type": "SearchAction",
+    "target": "https://sitavani.com/?search={search_term_string}",
+    "query-input": "required name=search_term_string"
+  }
+});
+---
+
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href="https://sitavani.com/" />
+
+    <!-- OpenGraph / Social Meta Tags -->
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://sitavani.com/" />
+    <meta property="og:site_name" content="SITAVANI" />
+
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content={title} />
+    <meta name="twitter:description" content={description} />
+
+    <!-- Google Fonts & Typography -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800;900&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Serif+Devanagari:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Schema.org JSON-LD for Google News & Search Snippets -->
+    <script type="application/ld+json" set:html={jsonLdSchema} />
+  </head>
+  <body class="bg-[#07080B] text-slate-100 antialiased selection:bg-amber-500/30 selection:text-amber-200 min-h-screen">
+    <slot />
+  </body>
+</html>
