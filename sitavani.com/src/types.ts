@@ -17,7 +17,7 @@ export interface Article {
   source_id: number;
   source_name: string;
   source_identifier?: string;
-  url_hash: string; // SHA-256 hash of original URL
+  url_hash: string;
   original_url: string;
   title: string;
   title_hi: string;
@@ -113,4 +113,71 @@ export interface FactVsMythCard {
   metric_label: string;
   metric_label_hi: string;
   source_citation: string;
+}
+
+// Social Platform Types
+export type UserRole = 'JIJNASU' | 'SADHAKA' | 'PANDITA' | 'ACHARYA' | 'ADMIN';
+
+export interface User {
+  wallet_address: string;
+  username: string;
+  display_name: string;
+  avatar_url?: string | null;
+  bio?: string | null;
+  role: UserRole;
+  karma_score: number;
+  is_verified_authority: boolean;
+  created_at: string;
+}
+
+export interface Sabha {
+  slug: string;
+  name_sa: string;
+  name_en: string;
+  name_hi: string;
+  description_en: string;
+  description_hi: string;
+  icon: string;
+  color: string;
+  is_official: boolean;
+}
+
+export interface Post {
+  id: string;
+  sabha_slug: string;
+  author_address: string;
+  author_name?: string;
+  author_role?: UserRole;
+  author_is_verified?: boolean;
+  title: string;
+  content: string;
+  media_url?: string | null;
+  media_type: 'IMAGE' | 'LINK' | 'TEXT';
+  original_url?: string | null;
+  is_pinned: boolean;
+  is_official_dispatch: boolean;
+  upvotes: number;
+  downvotes: number;
+  score: number;
+  comments_count: number;
+  chain_tx_hash?: string | null;
+  user_vote?: number;
+  created_at: string;
+}
+
+export interface Comment {
+  id: string;
+  post_id: string;
+  parent_id?: string | null;
+  author_address: string;
+  author_name?: string;
+  author_role?: UserRole;
+  author_is_verified?: boolean;
+  content: string;
+  upvotes: number;
+  downvotes: number;
+  score: number;
+  user_vote?: number;
+  created_at: string;
+  replies?: Comment[];
 }

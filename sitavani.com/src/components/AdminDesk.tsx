@@ -7,6 +7,9 @@ interface AdminDeskProps {
   onRefreshStats?: () => void;
 }
 
+const DESIGNATED_ADMIN_WALLET = '0xD22913B647d905d931E4dbBc36B2EECABB78329b';
+const KASTURI_CHAIN_ID = 108108;
+
 export const AdminDesk: React.FC<AdminDeskProps> = ({
   language,
   onRefreshStats
@@ -14,11 +17,18 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   const [activeTab, setActiveTab] = useState<'pending' | 'daemon' | 'sources' | 'archive'>('pending');
   const [authenticated, setAuthenticated] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
+  const [authAddress, setAuthAddress] = useState<string | null>(null);
   const [accessKey, setAccessKey] = useState('');
   const [authError, setAuthError] = useState('');
   const [actionFeedback, setActionFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
   const [actingArticleId, setActingArticleId] = useState<string | null>(null);
   
+  // Web3 state
+  const [walletAddress, setWalletAddress] = useState<string | null>(null);
+  const [hasProvider, setHasProvider] = useState<boolean>(false);
+  const [signing, setSigning] = useState<boolean>(false);
+  const [showKeyFallback, setShowKeyFallback] = useState<boolean>(false);
+
   // Pending queue state
   const [pendingArticles, setPendingArticles] = useState<Article[]>([]);
   const [loadingPending, setLoadingPending] = useState(true);
@@ -56,23 +66,169 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     return data;
   };
 
+  // Check initial session
   useEffect(() => {
     let active = true;
     fetch('/api/admin/session', { credentials: 'same-origin' })
       .then(async response => ({ response, data: await response.json().catch(() => ({})) }))
       .then(({ response, data }) => {
         if (!active) return;
-        setAuthenticated(response.ok && data.authenticated === true);
-        if (!response.ok) setAuthError(data.error || 'Admin access is not available.');
+        if (response.ok && data.authenticated === true) {
+          setAuthenticated(true);
+          setAuthAddress(data.address || DESIGNATED_ADMIN_WALLET);
+        } else {
+          setAuthenticated(false);
+        }
       })
       .catch(() => {
-        if (active) setAuthError('Could not reach the admin service.');
+        if (active) setAuthError('Could not reach the admin authority service.');
       })
       .finally(() => {
         if (active) setCheckingSession(false);
       });
     return () => { active = false; };
   }, []);
+
+  // Detect MetaMask
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).ethereum) {
+      setHasProvider(true);
+      const eth = (window as any).ethereum;
+      eth.request({ method: 'eth_accounts' })
+        .then((accounts: string[]) => {
+          if (accounts && accounts.length > 0) {
+            setWalletAddress(accounts[0]);
+          }
+        })
+        .catch(() => {});
+
+      const handleAccounts = (accounts: string[]) => {
+        if (accounts.length > 0) {
+          setWalletAddress(accounts[0]);
+        } else {
+          setWalletAddress(null);
+        }
+      };
+      eth.on('accountsChanged', handleAccounts);
+      return () => {
+        eth.removeListener('accountsChanged', handleAccounts);
+      };
+    }
+  }, []);
+
+  // Web3: Connect Wallet
+  const handleConnectWallet = async () => {
+    if (typeof window === 'undefined' || !(window as any).ethereum) {
+      setAuthError('MetaMask was not detected. Please install the MetaMask browser extension.');
+      return;
+    }
+    setAuthError('');
+    try {
+      const accounts = await (window as any).ethereum.request({ method: 'eth_requestAccounts' });
+      if (accounts && accounts[0]) {
+        setWalletAddress(accounts[0]);
+      }
+    } catch (err: any) {
+      setAuthError(err.message || 'Failed to connect MetaMask wallet.');
+    }
+  };
+
+  // Web3: Sign SIWE Cryptographic Challenge
+  const handleMetaMaskSignatureLogin = async () => {
+    if (!walletAddress) {
+      await handleConnectWallet();
+      return;
+    }
+
+    if (walletAddress.toLowerCase() !== DESIGNATED_ADMIN_WALLET.toLowerCase()) {
+      setAuthError(`Unauthorized wallet: ${walletAddress}. Only designated admin (${DESIGNATED_ADMIN_WALLET}) is permitted.`);
+      return;
+    }
+
+    setSigning(true);
+    setAuthError('');
+    try {
+      // 1. Get challenge nonce
+      const nonceRes = await fetch(`/api/auth/nonce?address=${encodeURIComponent(walletAddress)}`);
+      const nonceData = await nonceRes.json();
+      if (!nonceRes.ok || !nonceData.nonce) {
+        throw new Error(nonceData.error || 'Failed to generate authentication challenge.');
+      }
+
+      const nonce = nonceData.nonce;
+      const challengeMessage = [
+        'SITAVANI Sovereign Network Authentication',
+        'Sign-In with Kasturi Chain / Ethereum Wallet',
+        '',
+        `Address: ${walletAddress.toLowerCase()}`,
+        `Chain ID: ${KASTURI_CHAIN_ID}`,
+        `Nonce: ${nonce}`,
+        `Issued At: ${new Date().toISOString()}`,
+        '',
+        'Notice: Signing this message verifies ownership of your wallet without gas fees or state mutation.'
+      ].join('\n');
+
+      // 2. Request signature via MetaMask
+      const eth = (window as any).ethereum;
+      const signature = await eth.request({
+        method: 'personal_sign',
+        params: [challengeMessage, walletAddress]
+      });
+
+      // 3. Verify on server
+      const verifyRes = await fetch('/api/admin/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address: walletAddress,
+          signature,
+          nonce
+        })
+      });
+
+      const verifyData = await verifyRes.json();
+      if (!verifyRes.ok || !verifyData.authenticated) {
+        throw new Error(verifyData.error || 'Cryptographic signature rejected by server.');
+      }
+
+      setAuthenticated(true);
+      setAuthAddress(walletAddress);
+      setAuthError('');
+    } catch (err: any) {
+      setAuthError(err.message || 'MetaMask signature authentication failed.');
+    } finally {
+      setSigning(false);
+    }
+  };
+
+  // Fallback Key Login
+  const handleKeyLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    try {
+      const data = await adminRequest('/api/admin/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessKey })
+      });
+      if (data.authenticated) {
+        setAuthenticated(true);
+        setAuthAddress(DESIGNATED_ADMIN_WALLET);
+      }
+    } catch (e) {
+      setAuthError(e instanceof Error ? e.message : 'Invalid admin access key.');
+    }
+  };
+
+  // Logout
+  const handleLogout = async () => {
+    try {
+      await adminRequest('/api/admin/session', { method: 'DELETE' });
+    } finally {
+      setAuthenticated(false);
+      setAuthAddress(null);
+    }
+  };
 
   // Fetch Pending Queue
   const fetchPending = async () => {
@@ -152,7 +308,6 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     }
   };
 
-  // Open Edit Modal
   const openEditModal = (article: Article) => {
     setEditingArticle(article);
     setEditTitle(article.title);
@@ -163,7 +318,6 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     setEditNotes(article.editorial_notes || '');
   };
 
-  // Submit editorial edits for approval; publishing is a separate action.
   const handleUpdateAndApprove = async () => {
     if (!editingArticle) return;
     const id = editingArticle.id;
@@ -195,140 +349,217 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     }
   };
 
-  // Trigger Ingestion Pipeline Run
   const handleTriggerIngest = async () => {
     setRunningIngest(true);
+    setActionFeedback(null);
     try {
-      await adminRequest('/api/admin/ingest/run', { method: 'POST' });
-    } catch (err) {
-      setActionFeedback({ kind: 'error', message: err instanceof Error ? err.message : 'Ingestion is unavailable.' });
+      const data = await adminRequest('/api/admin/ingest/trigger', { method: 'POST' });
+      setActionFeedback({ kind: 'success', message: data.message || 'Ingestion initiated.' });
+      await fetchPending();
+      await fetchLogs();
+      onRefreshStats?.();
+    } catch (e) {
+      setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Ingestion trigger failed.' });
     } finally {
       setRunningIngest(false);
     }
   };
 
-  // Toggle Source Active Status
-  const handleToggleSource = async (id: number) => {
-    try {
-      const data = await adminRequest(`/api/admin/sources/${id}/toggle`, { method: 'PATCH' });
-      if (data.success) {
-        setSources(prev => prev.map(s => s.id === id ? data.source : s));
-      }
-    } catch (err) {
-      setActionFeedback({ kind: 'error', message: err instanceof Error ? err.message : 'Source update failed.' });
-    }
-  };
-
-  // Add Source
   const handleAddSource = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newSourceName || !newSourceRss) return;
-
+    if (!newSourceName.trim() || !newSourceUrl.trim() || !newSourceRss.trim()) return;
+    setAddingSource(true);
+    setActionFeedback(null);
     try {
-      const data = await adminRequest('/api/admin/sources', {
+      await adminRequest('/api/admin/sources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: newSourceName,
-          base_url: newSourceUrl,
-          rss_endpoint: newSourceRss,
-          is_active: true
+          name: newSourceName.trim(),
+          url: newSourceUrl.trim(),
+          rss: newSourceRss.trim()
         })
       });
-      if (data.success) {
-        setSources(prev => [...prev, data.source]);
-        setNewSourceName('');
-        setNewSourceUrl('');
-        setNewSourceRss('');
-        setAddingSource(false);
-      }
-    } catch (err) {
-      setActionFeedback({ kind: 'error', message: err instanceof Error ? err.message : 'Source could not be added.' });
-    }
-  };
-
-  const handleLogin = async (event: React.FormEvent) => {
-    event.preventDefault();
-    setAuthError('');
-    try {
-      const response = await fetch('/api/admin/session', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ accessKey })
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || 'Admin sign-in failed.');
-      setAuthenticated(true);
-      setAccessKey('');
-    } catch (error) {
-      setAuthError(error instanceof Error ? error.message : 'Admin sign-in failed.');
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await fetch('/api/admin/session', { method: 'DELETE', credentials: 'same-origin' });
+      setNewSourceName('');
+      setNewSourceUrl('');
+      setNewSourceRss('');
+      await fetchSources();
+    } catch (e) {
+      setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Could not add source.' });
     } finally {
-      setAuthenticated(false);
-      setPendingArticles([]);
-      setSources([]);
-      setDaemonLogs([]);
+      setAddingSource(false);
     }
   };
 
-  const handleArchiveAction = async (articleId: string, action: 'PUBLISH' | 'UNPUBLISH') => {
-    setActingArticleId(articleId);
-    setActionFeedback(null);
+  const handleToggleSource = async (id: string, active: boolean) => {
     try {
-      await adminRequest('/api/admin/articles/action', {
-        method: 'POST',
+      await adminRequest(`/api/admin/sources/${id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ article_id: articleId, action })
+        body: JSON.stringify({ active })
       });
-      await fetchArchive();
-      setActionFeedback({ kind: 'success', message: action === 'PUBLISH' ? 'Article published.' : 'Article unpublished and returned to approved status.' });
-      onRefreshStats?.();
-      fetchLogs();
-    } catch (error) {
-      setActionFeedback({ kind: 'error', message: error instanceof Error ? error.message : 'Editorial action failed.' });
-    } finally {
-      setActingArticleId(null);
+      await fetchSources();
+    } catch (e) {
+      setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to update source.' });
     }
   };
 
+  const handleDeleteSource = async (id: string) => {
+    if (!confirm('Permanently remove this source configuration?')) return;
+    try {
+      await adminRequest(`/api/admin/sources/${id}`, { method: 'DELETE' });
+      await fetchSources();
+    } catch (e) {
+      setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to delete source.' });
+    }
+  };
+
+  // Loading state
   if (checkingSession) {
-    return <main className="min-h-screen bg-[#060709] text-amber-300 font-mono grid place-items-center">Checking editorial session…</main>;
-  }
-
-  if (!authenticated) {
     return (
-      <main className="min-h-screen bg-[#060709] text-slate-100 grid place-items-center px-4">
-        <form onSubmit={handleLogin} className="w-full max-w-md rounded-xl border border-amber-900/50 bg-[#090B10] p-7 shadow-2xl space-y-5">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-widest text-amber-400">Sitavani · Editorial Access</p>
-            <h1 className="mt-2 text-2xl font-serif font-bold">Sign in to the review desk</h1>
-            <p className="mt-2 text-sm text-slate-400">Use the server-configured admin access key. It is exchanged for a short-lived, HttpOnly session cookie.</p>
-          </div>
-          {authError && <p role="alert" className="rounded border border-rose-900/60 bg-rose-950/30 p-3 text-sm text-rose-300">{authError}</p>}
-          <label className="block text-xs font-mono text-slate-300" htmlFor="admin-access-key">Admin access key</label>
-          <input
-            id="admin-access-key"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={accessKey}
-            onChange={event => setAccessKey(event.target.value)}
-            className="w-full rounded border border-slate-700 bg-[#060709] px-3 py-2 text-slate-100 focus:border-amber-500 focus:outline-none"
-          />
-          <button type="submit" className="w-full rounded bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-2.5 text-sm font-bold text-slate-950 hover:brightness-110">Continue</button>
-        </form>
+      <main className="min-h-screen bg-[#07090E] text-amber-300 font-mono grid place-items-center">
+        <div className="flex items-center gap-3">
+          <span className="w-3 h-3 rounded-full bg-amber-400 animate-ping"></span>
+          <span>आचार्य-सत्र-परीक्षा (Verifying Editorial Authority Session...)</span>
+        </div>
       </main>
     );
   }
 
+  // Cryptographic Web3 MetaMask Login Screen
+  if (!authenticated) {
+    const isMatchingWallet = walletAddress && walletAddress.toLowerCase() === DESIGNATED_ADMIN_WALLET.toLowerCase();
+
+    return (
+      <main className="min-h-screen bg-[#07090E] text-slate-100 flex items-center justify-center px-4 py-12">
+        <div className="w-full max-w-lg rounded-2xl border border-amber-900/50 bg-[#0A0D15] p-6 sm:p-8 shadow-2xl shadow-black/80 space-y-6">
+          {/* Header */}
+          <div className="border-b border-amber-950/60 pb-4">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-full bg-amber-400 animate-pulse"></span>
+              <p className="font-mono text-xs uppercase tracking-widest text-amber-400 font-bold">
+                आचार्य पीठम् · SITAVANI
+              </p>
+            </div>
+            <h1 className="mt-2 text-2xl font-serif font-bold text-slate-100">
+              Sovereign Editorial Desk
+            </h1>
+            <p className="mt-1 text-xs text-slate-400">
+              Cryptographic Web3 SIWE (Sign-In with Ethereum / Kasturi Chain) Authentication.
+            </p>
+          </div>
+
+          {/* Admin Wallet Specification */}
+          <div className="p-3.5 rounded-xl bg-[#07080B] border border-amber-900/40 text-xs font-mono space-y-1.5">
+            <div className="text-amber-400/90 font-bold flex items-center gap-1.5">
+              <span>🏛️</span>
+              <span>अधिकृत-प्रशासक-सञ्चिका (Designated Administrator):</span>
+            </div>
+            <div className="text-slate-200 break-all select-all font-semibold bg-black/40 p-2 rounded border border-slate-800">
+              {DESIGNATED_ADMIN_WALLET}
+            </div>
+          </div>
+
+          {/* Error Message */}
+          {authError && (
+            <p role="alert" className="rounded-lg border border-rose-900/60 bg-rose-950/40 p-3 text-xs text-rose-300 font-mono">
+              ⚠ {authError}
+            </p>
+          )}
+
+          {/* Wallet Status & Actions */}
+          <div className="space-y-4">
+            {!hasProvider ? (
+              <div className="p-4 rounded-xl border border-rose-900/40 bg-rose-950/20 text-xs text-rose-300 space-y-2">
+                <p className="font-semibold">मत्सञ्चिका न लब्धा (No Web3 Wallet Detected)</p>
+                <p className="text-slate-400">
+                  Please install MetaMask or a compatible Web3 browser extension to access the sovereign editorial authority.
+                </p>
+              </div>
+            ) : !walletAddress ? (
+              <button
+                type="button"
+                onClick={handleConnectWallet}
+                className="w-full flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-3 text-sm font-bold text-slate-950 hover:brightness-110 shadow-lg shadow-amber-500/20 transition-all"
+              >
+                <span>🦊</span>
+                <span>मत्सञ्चिकां संयोजयतु (Connect MetaMask Wallet)</span>
+              </button>
+            ) : !isMatchingWallet ? (
+              <div className="p-4 rounded-xl border border-amber-900/50 bg-[#07090E] space-y-3">
+                <div className="text-xs font-mono space-y-1">
+                  <span className="text-rose-400 font-bold">अनधिकृत-सञ्चिका (Unauthorized Wallet):</span>
+                  <div className="text-slate-300 break-all bg-black/40 p-1.5 rounded">{walletAddress}</div>
+                </div>
+                <p className="text-xs text-slate-400">
+                  This wallet does not match the designated Sovereign Administrator address. Please switch accounts in MetaMask.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleConnectWallet}
+                  className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono rounded-lg transition-colors"
+                >
+                  खातं परिवर्तयतु (Switch Account in MetaMask)
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-500/30 text-xs text-emerald-300 font-mono flex items-center justify-between">
+                  <span>✓ अधिकृत-सञ्चिका संयोजिता</span>
+                  <span className="truncate max-w-[150px]">{walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}</span>
+                </div>
+
+                <button
+                  type="button"
+                  disabled={signing}
+                  onClick={handleMetaMaskSignatureLogin}
+                  className="w-full flex items-center justify-center gap-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-3 text-sm font-bold text-slate-950 hover:brightness-110 shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50"
+                >
+                  <span>🔒</span>
+                  <span>{signing ? 'हस्ताक्षर-सत्यापनम्...' : 'हस्ताक्षरेण प्रमाणीकरोतु (Sign In with MetaMask)'}</span>
+                </button>
+              </div>
+            )}
+
+            {/* Fallback Access Key Accordion */}
+            <div className="border-t border-slate-800/80 pt-4">
+              <button
+                type="button"
+                onClick={() => setShowKeyFallback(!showKeyFallback)}
+                className="text-[11px] font-mono text-slate-500 hover:text-amber-400 transition-colors flex items-center gap-1"
+              >
+                <span>{showKeyFallback ? '▼' : '▶'}</span>
+                <span>वैकल्पिक-कुञ्जी (Fallback Access Key)</span>
+              </button>
+
+              {showKeyFallback && (
+                <form onSubmit={handleKeyLogin} className="mt-3 space-y-3">
+                  <input
+                    type="password"
+                    autoComplete="current-password"
+                    placeholder="Enter server access key"
+                    value={accessKey}
+                    onChange={e => setAccessKey(e.target.value)}
+                    className="w-full rounded-lg border border-slate-700 bg-[#060709] px-3 py-2 text-xs text-slate-100 focus:border-amber-500 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono rounded-lg transition-colors"
+                  >
+                    प्रवेशः (Authenticate via Key)
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Authenticated Editorial Desk
   return (
-    <div className="bg-[#060709] min-h-screen text-slate-100 font-sans pb-24">
+    <div className="bg-[#07090E] min-h-screen text-slate-100 font-sans pb-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
         
         {/* Top Header of Editorial Desk */}
@@ -340,42 +571,55 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 SITAVANI EDITORIAL DESK
               </h1>
             </div>
-            <p className="text-xs text-slate-400 font-mono mt-1">
-              Human-in-the-Loop Sovereign Intelligence Pipeline · Pending Review: <span className="text-amber-400 font-bold tabular-nums">{pendingArticles.length}</span> dispatches
-            </p>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400 font-mono mt-1">
+              <span>आचार्य पीठम्</span>
+              <span>•</span>
+              <span className="text-amber-400 font-semibold truncate max-w-[280px]" title={authAddress || DESIGNATED_ADMIN_WALLET}>
+                प्रशासकः {authAddress ? `${authAddress.slice(0, 8)}...${authAddress.slice(-6)}` : '0xD229...329b'}
+              </span>
+              <span>•</span>
+              <span>Pending Review: <strong className="text-amber-400 tabular-nums">{pendingArticles.length}</strong> dispatches</span>
+            </div>
           </div>
 
           <div className="flex items-center gap-3">
+            <a
+              href="/news"
+              target="_blank"
+              className="px-3 py-2 border border-slate-700 hover:border-amber-500/50 text-slate-300 hover:text-amber-300 rounded-md text-xs font-mono transition-colors"
+            >
+              वार्ता विभाग (Wire ↗)
+            </a>
             <button
               onClick={handleTriggerIngest}
-              disabled
-              title="Live feed ingestion has not been connected; no articles will be fabricated."
+              disabled={runningIngest}
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-md hover:brightness-110 transition-all disabled:opacity-50"
             >
               <span>⚙</span>
-              <span>Ingestion not configured</span>
+              <span>{runningIngest ? 'Ingesting...' : 'Run Ingestion'}</span>
             </button>
-
             <button
               onClick={fetchPending}
               className="px-3 py-2 border border-slate-700 hover:border-amber-500/50 text-slate-300 hover:text-amber-300 rounded-md text-xs font-mono transition-colors"
             >
               Refresh
             </button>
-            <button onClick={handleLogout} className="px-3 py-2 border border-slate-700 text-slate-300 hover:border-rose-700 hover:text-rose-300 rounded-md text-xs font-mono transition-colors">Sign out</button>
+            <button
+              onClick={handleLogout}
+              className="px-3 py-2 border border-slate-700 text-slate-300 hover:border-rose-700 hover:text-rose-300 rounded-md text-xs font-mono transition-colors"
+            >
+              Sign out
+            </button>
           </div>
         </header>
 
-        <p className="mb-6 rounded border border-amber-900/40 bg-amber-950/10 px-4 py-3 text-xs font-mono text-amber-200/80">
-          Storage is currently process-local memory. Articles and source settings are not persistent and reset when the server restarts.
-        </p>
         {actionFeedback && (
-          <p role={actionFeedback.kind === 'error' ? 'alert' : 'status'} className={`mb-6 rounded border px-4 py-3 text-sm ${actionFeedback.kind === 'error' ? 'border-rose-900/60 bg-rose-950/30 text-rose-300' : 'border-emerald-900/60 bg-emerald-950/30 text-emerald-300'}`}>
+          <p role={actionFeedback.kind === 'error' ? 'alert' : 'status'} className={`mb-6 rounded-lg border px-4 py-3 text-sm ${actionFeedback.kind === 'error' ? 'border-rose-900/60 bg-rose-950/30 text-rose-300' : 'border-emerald-900/60 bg-emerald-950/30 text-emerald-300'}`}>
             {actionFeedback.message}
           </p>
         )}
 
-        {/* Tab Navigation: Functional Segmented Buttons */}
+        {/* Tab Navigation */}
         <div className="flex items-center gap-1 overflow-x-auto pb-2 mb-8 border-b border-slate-800/80">
           <button
             onClick={() => setActiveTab('pending')}
@@ -385,7 +629,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>Pending Approvals</span>
+            <span>स्वीकृति-प्रतीक्षा Pending Approvals</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-amber-500/20 text-amber-400">
               {pendingArticles.length}
             </span>
@@ -399,7 +643,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-              <span>Activity & Ingestion Status</span>
+            <span>स्वचालित-संवाददूतः Ingest Daemon</span>
           </button>
 
           <button
@@ -410,7 +654,10 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>Configured Sources ({sources.length})</span>
+            <span>स्रोत-सञ्चयः Information Sources</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300">
+              {sources.length}
+            </span>
           </button>
 
           <button
@@ -421,346 +668,227 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>Archive & Ledger</span>
+            <span>अभिलेखागारम् Editorial Archive</span>
           </button>
-
         </div>
 
         {/* TAB 1: PENDING QUEUE */}
         {activeTab === 'pending' && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {loadingPending ? (
-              <div className="p-12 text-amber-500 font-mono text-center">
-                Loading pending articles...
+              <div className="text-center py-12 text-slate-500 font-mono text-xs">
+                स्वीकृति-प्रतीक्षा-सूच्याः आनयनम्... (Loading pending queue...)
               </div>
             ) : pendingArticles.length === 0 ? (
-              <div className="py-20 text-center rounded-xl border border-dashed border-slate-800 bg-[#0A0C10] p-8">
-                <p className="text-slate-400 font-mono text-sm">
-                  No articles are awaiting editorial review.
-                </p>
-                <p className="text-xs text-slate-600 font-mono mt-2">
-                  No live feed adapter is configured. The source registry remains available for future setup.
-                </p>
+              <div className="border border-dashed border-slate-800 rounded-xl p-12 text-center text-slate-500 space-y-2">
+                <p className="font-mono text-sm">न कोऽपि लेखः प्रतीक्षायाम् (No articles pending editorial review)</p>
+                <p className="text-xs text-slate-600">The ingestion daemon automatically queues relevant dharmic dispatches here.</p>
               </div>
             ) : (
-              pendingArticles.map((item) => {
-                const categoryLabel = CATEGORY_LABELS[item.category];
-
-                return (
-                  <div
-                    key={item.id}
-                    className="p-6 rounded-lg border border-slate-800 bg-[#0A0C10] hover:border-amber-500/40 transition-all flex flex-col lg:flex-row gap-6 justify-between items-start"
-                  >
-                    <div className="flex-1 space-y-3">
-                      {/* Clean Unboxed Metadata */}
-                      <div className="flex items-center flex-wrap gap-2 text-xs font-mono text-slate-400">
-                        <span className="text-amber-400 font-bold uppercase">{item.source_name}</span>
-                        <span aria-hidden="true" className="text-slate-700">·</span>
-                        <span className="text-slate-300">{categoryLabel.en}</span>
-                        <span aria-hidden="true" className="text-slate-700">·</span>
-                        <span className="text-slate-500 tabular-nums">Ingested {new Date(item.created_at).toLocaleTimeString()}</span>
-                        <span aria-hidden="true" className="text-slate-700">·</span>
-                        <a
-                          href={item.original_url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-amber-400 hover:underline inline-flex items-center gap-1"
-                        >
-                          <span>Inspect Source</span>
-                          <span aria-hidden="true">↗</span>
-                        </a>
+              <div className="grid grid-cols-1 gap-4">
+                {pendingArticles.map((article) => (
+                  <div key={article.id} className="bg-[#0B0D13] border border-slate-800/80 rounded-xl p-5 hover:border-slate-700 transition-colors flex flex-col md:flex-row justify-between gap-6">
+                    <div className="space-y-2 max-w-3xl">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+                        <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30">
+                          {CATEGORY_LABELS[article.category]?.[language === 'hi' ? 'hi' : 'en'] || article.category}
+                        </span>
+                        <span className="text-slate-500">•</span>
+                        <span className="text-slate-400">{article.source_name}</span>
+                        <span className="text-slate-600">•</span>
+                        <span className="text-slate-500">{new Date(article.published_at).toLocaleString()}</span>
                       </div>
 
-                      {/* Headlines */}
-                      <div className="space-y-1.5">
-                        <h3 className="text-lg font-serif font-bold text-slate-100 leading-snug">
-                          {item.title}
-                        </h3>
-                        {item.title_hi && (
-                          <h4 className="text-base font-hindi-serif text-amber-200/90 leading-snug">
-                            {item.title_hi}
-                          </h4>
-                        )}
-                      </div>
+                      <h3 className="text-base sm:text-lg font-bold font-serif text-slate-100">
+                        {article.title}
+                      </h3>
+                      {article.title_hi && (
+                        <p className="text-sm font-hindi-serif text-slate-300">{article.title_hi}</p>
+                      )}
 
-                      {/* Summary */}
-                      <p className="text-sm text-slate-300 leading-relaxed max-w-4xl">
-                        {item.summary}
+                      <p className="text-xs text-slate-400 leading-relaxed line-clamp-3">
+                        {article.summary}
                       </p>
 
-                      {/* Cryptographic hash & Matched keywords */}
-                      <div className="pt-2 flex flex-wrap items-center gap-4 text-xs font-mono text-slate-500">
-                        <span>SHA-256: <code className="text-emerald-400/90">{item.url_hash.slice(0, 16)}...</code></span>
-                        {item.matched_keywords && item.matched_keywords.length > 0 && (
-                          <span>Matched: {item.matched_keywords.join(', ')}</span>
-                        )}
+                      <div className="pt-2">
+                        <a
+                          href={article.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[11px] font-mono text-amber-400/80 hover:text-amber-300 underline"
+                        >
+                          मूलस्रोत-परीक्षणम् (Verify Source Link ↗)
+                        </a>
                       </div>
                     </div>
 
-                    {/* Action Buttons */}
-                    <div className="flex lg:flex-col gap-2.5 min-w-[170px] w-full lg:w-auto pt-2 lg:pt-0">
+                    <div className="flex md:flex-col justify-end gap-2 shrink-0">
                       <button
-                        onClick={() => handleAction(item.id, 'APPROVE')}
-                        className="flex-1 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase px-4 py-2.5 rounded shadow hover:brightness-110 tracking-wider transition-all"
+                        disabled={actingArticleId === article.id}
+                        onClick={() => openEditModal(article)}
+                        className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-xs text-slate-200 font-mono transition-colors"
                       >
-                        Approve draft
+                        सम्पाद (Edit)
                       </button>
-
                       <button
-                        onClick={() => openEditModal(item)}
-                        className="flex-1 border border-amber-600/40 bg-amber-950/20 text-amber-300 hover:bg-amber-900/30 text-xs font-semibold uppercase px-4 py-2 rounded tracking-wider transition-colors"
+                        disabled={actingArticleId === article.id}
+                        onClick={() => handleAction(article.id, 'APPROVE')}
+                        className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-slate-950 font-mono transition-colors"
                       >
-                        Edit & Review
+                        स्वीकुरु (Approve)
                       </button>
-
                       <button
-                        onClick={() => handleAction(item.id, 'DISCARD')}
-                        className="flex-1 border border-rose-900/60 bg-rose-950/20 text-rose-400 text-xs uppercase px-4 py-2 rounded hover:bg-rose-900/40 tracking-wider transition-colors"
+                        disabled={actingArticleId === article.id}
+                        onClick={() => handleAction(article.id, 'DISCARD')}
+                        className="px-3 py-1.5 rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-800 text-xs text-rose-300 font-mono transition-colors"
                       >
-                        Discard
+                        त्यागः (Discard)
                       </button>
                     </div>
                   </div>
-                );
-              })
+                ))}
+              </div>
             )}
           </div>
         )}
 
-        {/* TAB 2: INGESTION STATUS AND ACTIVITY LOG */}
+        {/* TAB 2: DAEMON LOGS */}
         {activeTab === 'daemon' && (
-          <div className="space-y-6">
-            <div className="p-6 rounded-lg border border-slate-800 bg-[#090B10] space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
-                <div>
-                  <h3 className="text-base font-mono font-bold text-amber-400">
-                    Ingestion status
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1">
-                    No external feeds are fetched in this version. An ingestion adapter must be configured before a run can add articles.
-                  </p>
-                </div>
-                <button
-                  onClick={handleTriggerIngest}
-                  disabled
-                  className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase rounded transition-colors disabled:opacity-50"
-                >
-                  Ingestion not configured
-                </button>
-              </div>
-
-              {/* Terminal Logs View */}
-              <div className="rounded-lg bg-black border border-slate-800 p-4 font-mono text-xs text-slate-300 h-96 overflow-y-auto space-y-2">
-                <div className="text-slate-500 pb-2 border-b border-slate-900 flex justify-between">
-                  <span>/var/log/sitavani_ingestion.log</span>
-                  <span>{daemonLogs.length} events logged</span>
-                </div>
-                {daemonLogs.map((log) => (
-                  <div key={log.id} className="leading-relaxed flex items-start gap-2">
-                    <span className="text-slate-600 tabular-nums">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
-                    <span className={
-                      log.level === 'SUCCESS' ? 'text-emerald-400' :
-                      log.level === 'INGEST' ? 'text-amber-400' :
-                      log.level === 'WARN' ? 'text-rose-400' : 'text-slate-400'
-                    }>
-                      [{log.level}]
-                    </span>
-                    <span className="text-slate-300">{log.message}</span>
-                  </div>
-                ))}
+          <div className="space-y-4">
+            <div className="bg-[#0B0D13] border border-slate-800 rounded-xl p-5 space-y-3">
+              <h3 className="text-sm font-bold font-mono text-slate-200">
+                स्वचालित-संवाददूत-विवरणम् (Ingest Pipeline Execution Logs)
+              </h3>
+              <div className="bg-[#07080B] rounded-lg p-4 font-mono text-xs text-slate-300 max-h-96 overflow-y-auto space-y-1 border border-slate-900">
+                {daemonLogs.length === 0 ? (
+                  <span className="text-slate-600">न कोऽपि विवरण-लेखः अधुना।</span>
+                ) : (
+                  daemonLogs.map((log, idx) => (
+                    <div key={idx} className="flex gap-2">
+                      <span className="text-slate-500">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                      <span className={log.level === 'ERROR' ? 'text-rose-400' : log.level === 'WARN' ? 'text-amber-400' : 'text-slate-300'}>
+                        [{log.level}] {log.message}
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* TAB 3: SOURCES REGISTRY */}
+        {/* TAB 3: SOURCES */}
         {activeTab === 'sources' && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-serif font-bold text-slate-100">
-                  Configured News Sources
-                </h3>
-                <p className="text-xs font-mono text-slate-400 mt-0.5">
-                  RSS endpoints saved for future ingestion setup
-                </p>
-              </div>
-              <button
-                onClick={() => setAddingSource(!addingSource)}
-                className="px-3.5 py-1.5 border border-amber-500/50 text-amber-300 hover:bg-amber-500/10 rounded text-xs font-mono transition-colors"
-              >
-                {addingSource ? 'Cancel' : '+ Add Source Endpoint'}
-              </button>
-            </div>
-
             {/* Add Source Form */}
-            {addingSource && (
-              <form onSubmit={handleAddSource} className="p-5 rounded-lg border border-amber-900/40 bg-[#0B0E14] space-y-4">
-                <h4 className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
-                  Register an RSS endpoint
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <input
-                    type="text"
-                    placeholder="Source Name (e.g. Sanskrit Epigraphy Bureau)"
-                    value={newSourceName}
-                    onChange={(e) => setNewSourceName(e.target.value)}
-                    required
-                    className="bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-xs text-slate-200"
-                  />
-                  <input
-                    type="url"
-                    placeholder="Base Website URL (https://...)"
-                    value={newSourceUrl}
-                    onChange={(e) => setNewSourceUrl(e.target.value)}
-                    className="bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-xs text-slate-200"
-                  />
-                  <input
-                    type="url"
-                    placeholder="RSS / XML Feed Endpoint URL"
-                    value={newSourceRss}
-                    onChange={(e) => setNewSourceRss(e.target.value)}
-                    required
-                    className="bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-xs text-slate-200"
-                  />
-                </div>
+            <form onSubmit={handleAddSource} className="bg-[#0B0D13] border border-slate-800 rounded-xl p-5 space-y-4">
+              <h3 className="text-sm font-bold font-serif text-slate-200">
+                नूतन-स्रोत-संयोजनम् (Add Ingestion Source)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                <input
+                  type="text"
+                  placeholder="Source Name (e.g. DD India)"
+                  value={newSourceName}
+                  onChange={e => setNewSourceName(e.target.value)}
+                  className="bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 focus:border-amber-500 focus:outline-none"
+                />
+                <input
+                  type="url"
+                  placeholder="Website URL"
+                  value={newSourceUrl}
+                  onChange={e => setNewSourceUrl(e.target.value)}
+                  className="bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 focus:border-amber-500 focus:outline-none"
+                />
+                <input
+                  type="url"
+                  placeholder="RSS / Atom Feed URL"
+                  value={newSourceRss}
+                  onChange={e => setNewSourceRss(e.target.value)}
+                  className="bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 focus:border-amber-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex justify-end">
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-amber-500 text-slate-950 font-bold text-xs uppercase rounded hover:bg-amber-400 transition-colors"
+                  disabled={addingSource}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase rounded hover:brightness-110 disabled:opacity-50"
                 >
-                  Save Source in Memory
+                  {addingSource ? 'संयोजनम्...' : 'स्रोतं योजयतु (Save Source)'}
                 </button>
-              </form>
-            )}
+              </div>
+            </form>
 
-            {/* Sources Table */}
-            <div className="rounded-lg border border-slate-800 overflow-hidden bg-[#0A0C10]">
-              <table className="w-full text-left font-mono text-xs">
-                <thead className="bg-[#0F121A] text-slate-400 border-b border-slate-800">
-                  <tr>
-                    <th className="py-3 px-4">Source Name</th>
-                    <th className="py-3 px-4 hidden sm:table-cell">RSS Endpoint</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {sources.map((s) => (
-                    <tr key={s.id} className="hover:bg-[#0E1118]">
-                      <td className="py-3.5 px-4 font-semibold text-slate-200">
-                        {s.name}
-                        <div className="text-[11px] text-slate-500 font-normal sm:hidden mt-0.5 truncate max-w-xs">
-                          {s.rss_endpoint}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-4 text-slate-400 hidden sm:table-cell truncate max-w-md">
-                        {s.rss_endpoint}
-                      </td>
-                      <td className="py-3.5 px-4">
-                        <span className={`inline-flex items-center gap-1.5 ${s.is_active ? 'text-emerald-400' : 'text-slate-500'}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${s.is_active ? 'bg-emerald-400' : 'bg-slate-600'}`} />
-                          {s.is_active ? 'Active' : 'Paused'}
-                        </span>
-                      </td>
-                      <td className="py-3.5 px-4 text-right">
-                        <button
-                          onClick={() => handleToggleSource(s.id)}
-                          className="text-[11px] text-amber-400 hover:text-amber-300 underline"
-                        >
-                          {s.is_active ? 'Pause' : 'Activate'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Sources List */}
+            <div className="grid grid-cols-1 gap-3">
+              {sources.map(src => (
+                <div key={src.id} className="bg-[#0B0D13] border border-slate-800/80 rounded-xl p-4 flex items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-serif font-bold text-sm text-slate-200">{src.name}</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${src.active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>
+                        {src.active ? 'ACTIVE' : 'PAUSED'}
+                      </span>
+                    </div>
+                    <p className="text-xs font-mono text-slate-400 truncate max-w-xl">{src.rss}</p>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      onClick={() => handleToggleSource(src.id, !src.active)}
+                      className="px-2.5 py-1 text-xs font-mono rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    >
+                      {src.active ? 'विराम (Pause)' : 'प्रवर्त्य (Enable)'}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteSource(src.id)}
+                      className="px-2.5 py-1 text-xs font-mono rounded bg-rose-950/60 hover:bg-rose-900 text-rose-300"
+                    >
+                      अपसारय (Delete)
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         )}
 
-        {/* TAB 4: ARCHIVE & LEDGER */}
+        {/* TAB 4: ARCHIVE */}
         {activeTab === 'archive' && (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-serif font-bold text-slate-100">
-                  Editorial archive
-                </h3>
-                <p className="text-xs font-mono text-slate-400">
-                  Process-local editorial records; changes reset when the server restarts.
-                </p>
-              </div>
-
-              {/* Status Filter Buttons */}
-              <div className="flex items-center gap-1 bg-[#0A0C10] p-1 border border-slate-800 rounded-md">
-                {(['ALL', 'APPROVED', 'PUBLISHED', 'DISCARDED'] as const).map(st => (
-                  <button
-                    key={st}
-                    onClick={() => setArchiveStatusFilter(st)}
-                    className={`px-3 py-1 text-xs font-mono rounded ${
-                      archiveStatusFilter === st
-                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                        : 'text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {st}
-                  </button>
-                ))}
-              </div>
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 font-mono text-xs">
+              {(['ALL', 'APPROVED', 'PUBLISHED', 'DISCARDED'] as const).map(st => (
+                <button
+                  key={st}
+                  onClick={() => setArchiveStatusFilter(st)}
+                  className={`px-3 py-1 rounded transition-colors ${archiveStatusFilter === st ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'bg-slate-900 text-slate-400'}`}
+                >
+                  {st}
+                </button>
+              ))}
             </div>
 
             {loadingArchive ? (
-              <div className="p-8 text-center font-mono text-amber-400">Loading ledger...</div>
+              <div className="text-center py-12 text-slate-500 font-mono text-xs">
+                अभिलेखागार-विवरणस्य आनयनम्... (Loading archive...)
+              </div>
+            ) : archiveArticles.length === 0 ? (
+              <div className="border border-dashed border-slate-800 rounded-xl p-12 text-center text-slate-500 font-mono text-xs">
+                न कोऽपि लेखः अभिलेखागारे।
+              </div>
             ) : (
-              <div className="rounded-lg border border-slate-800 bg-[#0A0C10] divide-y divide-slate-800/60">
-                {archiveArticles.map(item => (
-                  <div key={item.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 font-mono text-slate-400">
-                        <span className={`px-2 py-0.5 rounded text-[10px] ${
-                          item.status === 'PUBLISHED' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/50' :
-                          item.status === 'DISCARDED' ? 'bg-rose-950 text-rose-400 border border-rose-800/50' :
-                          'bg-amber-950 text-amber-400 border border-amber-800/50'
-                        }`}>
-                          {item.status}
-                        </span>
-                        <span className="text-amber-400 font-semibold">{item.source_name}</span>
-                        <span>·</span>
-                        <span>{item.category}</span>
+              <div className="grid grid-cols-1 gap-3">
+                {archiveArticles.map(art => (
+                  <div key={art.id} className="bg-[#0B0D13] border border-slate-800/80 rounded-xl p-4 flex justify-between items-center gap-4">
+                    <div>
+                      <h4 className="font-serif font-bold text-sm text-slate-200">{art.title}</h4>
+                      <div className="text-[11px] font-mono text-slate-500 flex gap-2 mt-1">
+                        <span>{art.category}</span>
+                        <span>•</span>
+                        <span>{art.status}</span>
+                        <span>•</span>
+                        <span>{new Date(art.published_at).toLocaleDateString()}</span>
                       </div>
-                      <h4 className="text-sm font-semibold text-slate-200">{item.title}</h4>
-                      <div className="font-mono text-[11px] text-slate-500">
-                        Hash: {item.url_hash}
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 self-end sm:self-center">
-                      {item.status === 'APPROVED' && (
-                        <button
-                          disabled={actingArticleId === item.id}
-                          onClick={() => handleArchiveAction(item.id, 'PUBLISH')}
-                          className="px-2.5 py-1 text-xs border border-emerald-900/50 text-emerald-400 rounded hover:bg-emerald-900/20 disabled:opacity-50"
-                        >
-                          Publish
-                        </button>
-                      )}
-                      {item.status === 'PUBLISHED' && (
-                        <button
-                          disabled={actingArticleId === item.id}
-                          onClick={() => handleArchiveAction(item.id, 'UNPUBLISH')}
-                          className="px-2.5 py-1 text-xs border border-rose-900/50 text-rose-400 rounded hover:bg-rose-900/20 disabled:opacity-50"
-                        >
-                          Unpublish
-                        </button>
-                      )}
-                      <a
-                        href={item.original_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-slate-400 hover:text-amber-300 p-1"
-                      >
-                        ↗
-                      </a>
                     </div>
                   </div>
                 ))}
@@ -769,17 +897,15 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
           </div>
         )}
 
-
-
       </div>
 
-      {/* EDIT & PUBLISH MODAL */}
+      {/* Edit Modal */}
       {editingArticle && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#090B10] border border-amber-900/50 rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="bg-[#0B0D13] border border-amber-900/50 rounded-xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-100">
-                Editorial Modification & Publishing Review
+              <h3 className="text-base font-bold text-slate-100 font-serif">
+                लेख-संशोधनम् (Editorial Review & Modification)
               </h3>
               <button onClick={() => setEditingArticle(null)} className="text-slate-400 hover:text-white">✕</button>
             </div>
@@ -845,10 +971,9 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-slate-400 font-mono mb-1">Curatorial Note (Optional)</label>
+                  <label className="block text-slate-400 font-mono mb-1">Editorial Note</label>
                   <input
                     type="text"
-                    placeholder="Add a source or review note"
                     value={editNotes}
                     onChange={(e) => setEditNotes(e.target.value)}
                     className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100"
@@ -862,13 +987,13 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 onClick={() => setEditingArticle(null)}
                 className="px-4 py-2 border border-slate-700 text-slate-300 text-xs rounded hover:bg-slate-800"
               >
-                Cancel
+                विराम (Cancel)
               </button>
               <button
                 onClick={handleUpdateAndApprove}
                 className="px-5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase rounded hover:brightness-110"
               >
-                Save and approve draft
+                संशोधनं रक्षतु (Save and Approve)
               </button>
             </div>
           </div>

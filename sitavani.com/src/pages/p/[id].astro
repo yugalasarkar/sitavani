@@ -1,0 +1,66 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import { ThreadView } from '../../components/ThreadView';
+import { socialRepository } from '../../data/socialRepository';
+import type { DisplayLanguage } from '../../types';
+
+export const prerender = false;
+
+const { id } = Astro.params;
+if (!id) {
+  return Astro.redirect('/');
+}
+
+const [post, comments, sabhas] = await Promise.all([
+  socialRepository.getPost(id),
+  socialRepository.listComments(id),
+  socialRepository.getSabhas()
+]);
+
+if (!post) {
+  Astro.response.status = 404;
+}
+
+const requestedLanguage = Astro.url.searchParams.get('lang');
+const language: DisplayLanguage = requestedLanguage === 'hi' || requestedLanguage === 'en' ? requestedLanguage : 'dual';
+---
+
+<Layout
+  title={post ? `${post.title} | SITAVANI मण्डल` : 'विषयः न लब्धः | Post Not Found | SITAVANI'}
+  description={post ? post.content.slice(0, 160) : 'Sovereign Dharmic Community Discourse'}
+>
+  <div class="min-h-screen flex flex-col bg-[#07090E] text-slate-100 font-sans">
+    <Header currentPath="/" language={language} />
+
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-5xl">
+      {!post ? (
+        <section class="rounded-xl border border-amber-900/40 bg-[#0B0D13] p-10 text-center space-y-4">
+          <p class="font-mono text-xs uppercase tracking-widest text-amber-500">४०४ · विषयः न लब्धः</p>
+          <h1 class="text-2xl font-bold font-serif text-slate-100">Post Not Found</h1>
+          <p class="text-xs text-slate-400">The requested discussion thread does not exist or has been archived.</p>
+          <div class="pt-2">
+            <a href="/" class="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs uppercase hover:bg-amber-400 inline-block">
+              ← Return to Samvāda
+            </a>
+          </div>
+        </section>
+      ) : (
+        <div class="space-y-6">
+          <nav aria-label="Breadcrumb" class="flex items-center gap-2 text-xs font-mono text-slate-400">
+            <a href="/" class="hover:text-amber-300">संसद् Mukhapṛṣṭha</a>
+            <span>/</span>
+            <a href={`/s/${post.sabha_slug}`} class="hover:text-amber-300">मण्डल {post.sabha_slug}</a>
+            <span>/</span>
+            <span class="text-slate-500 truncate max-w-xs">{post.title}</span>
+          </nav>
+
+          <ThreadView client:load post={post} initialComments={comments} sabhas={sabhas} />
+        </div>
+      )}
+    </main>
+
+    <Footer language={language} />
+  </div>
+</Layout>

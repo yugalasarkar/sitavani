@@ -2,8 +2,12 @@
 import Layout from '../layouts/Layout.astro';
 import { AdminDesk } from '../components/AdminDesk';
 
+export const prerender = false;
 ---
 
-<Layout title="Editorial Desk | SITAVANI" description="Authorized editorial review and publication controls.">
+<Layout
+  title="आचार्य पीठम् | Editorial Authority Desk | SITAVANI"
+  description="Sovereign editorial review, ingestion daemon controls, and cryptographic administration."
+>
   <AdminDesk client:load language="dual" />
 </Layout>

@@ -1,0 +1,128 @@
+---
+import Layout from '../layouts/Layout.astro';
+import Header from '../components/Header.astro';
+import BharatShaktiPulse from '../components/BharatShaktiPulse.astro';
+import DailyVedicInsight from '../components/DailyVedicInsight.astro';
+import LeadHeroStory from '../components/LeadHeroStory.astro';
+import FeaturedGrid from '../components/FeaturedGrid.astro';
+import BharatRenaissanceMap from '../components/BharatRenaissanceMap.astro';
+import FactVsMythDesk from '../components/FactVsMythDesk.astro';
+import { DispatchWireIsland } from '../components/DispatchWireIsland';
+import Footer from '../components/Footer.astro';
+import { getFeed, getStats } from '../data/store';
+import type { DisplayLanguage, NewsCategory } from '../types';
+
+const validCategories = new Set<NewsCategory>([
+  'HERITAGE', 'MANDIR', 'DEFENSE', 'SCIENCE', 'SANSKRIT', 'GOVERNANCE', 'NARRATIVE_FACTS', 'GENERAL'
+]);
+const url = new URL(Astro.request.url);
+const requestedCategory = url.searchParams.get('category') || 'ALL';
+const selectedCategory: NewsCategory | 'ALL' = requestedCategory === 'ALL' || validCategories.has(requestedCategory as NewsCategory)
+  ? requestedCategory as NewsCategory | 'ALL'
+  : 'ALL';
+const requestedLanguage = url.searchParams.get('lang');
+const language: DisplayLanguage = requestedLanguage === 'en' || requestedLanguage === 'hi' || requestedLanguage === 'dual'
+  ? requestedLanguage
+  : 'dual';
+const searchQuery = (url.searchParams.get('search') || '').slice(0, 200);
+
+let feedData: Awaited<ReturnType<typeof getFeed>> | undefined;
+let stats: Awaited<ReturnType<typeof getStats>> | undefined;
+let databaseUnavailable = false;
+
+try {
+  [feedData, stats] = await Promise.all([
+    getFeed(selectedCategory, searchQuery, 100),
+    getStats()
+  ]);
+} catch {
+  Astro.response.status = 503;
+  databaseUnavailable = true;
+}
+
+const dispatches = feedData?.articles || [];
+const heroDispatch = dispatches.find((article) => article.salience === 'LEAD') || dispatches[0];
+const featuredDispatches = dispatches.filter((article) => article.id !== heroDispatch?.id && article.salience === 'FEATURE').slice(0, 4);
+const wireDispatches = dispatches.filter((article) => article.id !== heroDispatch?.id && !featuredDispatches.some(({ id }) => id === article.id));
+const excludedArticleIds = [heroDispatch?.id, ...featuredDispatches.map((article) => article.id)].filter((id): id is string => Boolean(id));
+---
+
+<Layout title="वार्ता Vārtā | SITAVANI Editorial Wire — Sovereign News & Attributed Reporting" description="Source-verified dispatches, civilizational reporting, and dharmic commentary.">
+  <div class="min-h-screen flex flex-col bg-[#07090E] text-slate-100 font-sans">
+    <Header currentPath="/news" language={language} />
+
+    <!-- News Banner -->
+    <div class="bg-gradient-to-r from-amber-950/40 via-[#0C0F17] to-amber-950/20 border-b border-amber-900/30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-lg font-serif">
+            वा
+          </div>
+          <div>
+            <h1 class="text-lg font-bold text-slate-100 font-serif tracking-wide">
+              वार्ता विभाग <span class="text-amber-400 font-mono text-sm font-normal">| Vārtā Vibhāga (News Wire)</span>
+            </h1>
+            <p class="text-xs text-slate-400">
+              Direct, verified journalistic dispatches from primary archives and on-ground correspondents.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <a
+            href="/"
+            class="px-3 py-1.5 rounded-lg bg-slate-900/80 hover:bg-slate-800 border border-slate-700 text-xs text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors"
+          >
+            <span>←</span>
+            <span>संसद् / मण्डल Samvāda (Community Feed)</span>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <main class="flex-grow container mx-auto px-4 py-8 space-y-12 max-w-7xl">
+      {databaseUnavailable ? (
+        <section class="min-h-72 rounded-xl border border-amber-900/30 bg-[#0A0C12] p-8 flex flex-col justify-center">
+          <p class="font-mono text-xs uppercase tracking-widest text-amber-400">SITAVANI · Editorial archive</p>
+          <h1 class="mt-3 text-3xl sm:text-4xl font-serif font-bold text-slate-100">The archive is temporarily unavailable</h1>
+          <p class="mt-3 max-w-2xl text-sm text-slate-400">The editorial database could not be reached. Please try again shortly.</p>
+        </section>
+      ) : (
+      <>
+        <BharatShaktiPulse stats={stats!} language={language} />
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div class="lg:col-span-2">
+            {heroDispatch ? <LeadHeroStory article={heroDispatch} language={language} /> : (
+              <section class="min-h-72 rounded-xl border border-amber-900/30 bg-[#0A0C12] p-8 flex flex-col justify-center">
+                <p class="font-mono text-xs uppercase tracking-widest text-amber-400">SITAVANI · Editorial wire</p>
+                <h1 class="mt-3 text-3xl sm:text-4xl font-serif font-bold text-slate-100">Published dispatches</h1>
+                <p class="mt-3 max-w-2xl text-sm text-slate-400">{dispatches.length === 0 && (selectedCategory !== 'ALL' || searchQuery) ? 'No published dispatches match these filters.' : 'There are no published articles yet. New reporting will appear here after source review and explicit editorial publication.'}</p>
+              </section>
+            )}
+          </div>
+          <div class="space-y-6"><DailyVedicInsight language={language} /></div>
+        </div>
+
+        {featuredDispatches.length > 0 && <FeaturedGrid articles={featuredDispatches} language={language} />}
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div class="lg:col-span-2"><BharatRenaissanceMap language={language} /></div>
+          <div><FactVsMythDesk language={language} /></div>
+        </div>
+
+        <DispatchWireIsland
+          client:load
+          articles={wireDispatches}
+          selectedCategory={selectedCategory}
+          searchQuery={searchQuery}
+          excludedArticleIds={excludedArticleIds}
+          language={language}
+        />
+      </>
+      )}
+    </main>
+
+    <Footer language={language} />
+  </div>
+</Layout>
