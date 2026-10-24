@@ -1,36 +1,20 @@
 import type { APIRoute } from 'astro';
 import { toggleSource } from '../../../../../data/store';
+import { protectAdminRequest } from '../../../../../lib/adminAuth';
+import { dataErrorResponse, jsonError, jsonResponse } from '../../../../../lib/api';
 
-export function getStaticPaths() {
-  return [
-    { params: { id: '1' } },
-    { params: { id: '2' } },
-    { params: { id: '3' } },
-    { params: { id: '4' } },
-    { params: { id: '5' } },
-    { params: { id: '6' } },
-  ];
-}
+export const PATCH: APIRoute = async ({ request, params }) => {
+  const denied = protectAdminRequest(request, true);
+  if (denied) return denied;
+  const rawId = params.id || '';
+  const id = Number(rawId);
+  if (!/^\d+$/.test(rawId) || !Number.isSafeInteger(id) || id < 1) return jsonError('Invalid source ID.', 400);
 
-export const PATCH: APIRoute = ({ params }) => {
-  const id = Number(params.id);
-  if (isNaN(id)) {
-    return new Response(JSON.stringify({ error: 'Invalid source ID' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' }
-    });
+  try {
+    const result = await toggleSource(id);
+    if (result.error) return jsonError(result.error, result.status || 404);
+    return jsonResponse(result);
+  } catch (error) {
+    return dataErrorResponse(error);
   }
-
-  const result = toggleSource(id);
-  if (result.error) {
-    return new Response(JSON.stringify({ error: result.error }), {
-      status: result.status || 404,
-      headers: { 'Content-Type': 'application/json' }
-    });
-  }
-
-  return new Response(JSON.stringify(result), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' }
-  });
 };

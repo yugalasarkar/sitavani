@@ -1,139 +1,24 @@
 ---
-import { StateProjectMap } from '../types';
+import type { DisplayLanguage } from '../types';
 
-export const STATE_PROJECTS_DATA: StateProjectMap[] = [
-  {
-    id: 'state-up',
-    state_code: 'UP',
-    state_name: 'Uttar Pradesh',
-    state_name_hi: 'उत्तर प्रदेश',
-    active_projects_count: 14,
-    category: 'MANDIR',
-    lead_project: 'Kashi Vishwanath Dham & Ayodhya Ram Janmabhoomi Complex',
-    lead_project_hi: 'काशी विश्वनाथ धाम एवं अयोध्या राम जन्मभूमि गलियारा',
-    description_en: 'Comprehensive heritage reclamation including 108 stone kunds, Mathura Braj Circuit, and Ganga Expressway infrastructure.',
-    description_hi: '108 पौराणिक कुण्डों का पुनरुद्धार, मथुरा ब्रज गलियारा एवं गंगा एक्सप्रेसवे का निर्माण।',
-    status_badge: 'Consolidated Sanctum'
-  },
-  {
-    id: 'state-tn',
-    state_code: 'TN',
-    state_name: 'Tamil Nadu',
-    state_name_hi: 'तमिलनाडु',
-    active_projects_count: 18,
-    category: 'HERITAGE',
-    lead_project: 'Keeladi Sangam Excavations & Chola Bronze Repatriation',
-    lead_project_hi: 'कीलाड़ी उत्खनन एवं चोल कांस्य प्रतिमा वापसी',
-    description_en: 'ASI carbon dating establishing 6th century BCE maritime urban civilization and Thanjavur sanctum bronze consecration.',
-    description_hi: 'छठी शताब्दी ईसा पूर्व की समुद्री सभ्यता की पुष्टि एवं तंजावुर गर्भगृह में चोल मूर्तियों की पुनर्स्थापना।',
-    status_badge: 'ASI Active Site'
-  },
-  {
-    id: 'state-gj',
-    state_code: 'GJ',
-    state_name: 'Gujarat',
-    state_name_hi: 'गुजरात',
-    active_projects_count: 12,
-    category: 'DEFENSE',
-    lead_project: 'Vadhavan Mega Port & Lothal National Maritime Heritage Complex',
-    lead_project_hi: 'वाधवन महा बंदरगाह एवं लोथल राष्ट्रीय समुद्री विरासत परिसर',
-    description_en: 'World\'s oldest dockyard restoration at Lothal paired with deep-water sovereign container port logistics.',
-    description_hi: 'लोथल हड़प्पा बंदरगाह का जीर्णोद्धार एवं विश्व स्तरीय वाधवन गहरे पानी के बंदरगाह का विकास।',
-    status_badge: 'Maritime Sovereign Hub'
-  },
-  {
-    id: 'state-ka',
-    state_code: 'KA',
-    state_name: 'Karnataka',
-    state_name_hi: 'कर्नाटक',
-    active_projects_count: 15,
-    category: 'SCIENCE',
-    lead_project: 'ISRO Human Spaceflight Centre & HAL Helicopter Complex',
-    lead_project_hi: 'इसरो मानव अंतरिक्ष उड़ान केंद्र एवं एचएएल हेलीकॉप्टर कॉम्प्लेक्स',
-    description_en: 'Bengaluru space telemetry command control and Tumakuru indigenous defense manufacturing facilities.',
-    description_hi: 'बेंगलुरु अंतरिक्ष टेलीमेट्री नियंत्रण केंद्र एवं तुमकुरु में एशिया के सबसे बड़े हेलीकॉप्टर कारखाने का संचालन।',
-    status_badge: 'Aero-Space Hub'
-  }
-];
-
-interface Props {
-  language?: 'en' | 'hi' | 'dual';
-}
-
+interface Props { language?: DisplayLanguage }
 const { language = 'dual' } = Astro.props;
-const selectedState = STATE_PROJECTS_DATA[0];
 ---
 
-<section id="heritage" class="mb-12 rounded-xl border border-amber-900/30 bg-[#0A0D14] p-6 shadow-xl">
-  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-amber-950/40 pb-4 mb-6">
+<section id="heritage" aria-labelledby="renaissance-map-title" class="h-full rounded-xl border border-amber-900/30 bg-[#0A0D14] p-6 shadow-xl relative overflow-hidden">
+  <div class="absolute -top-20 -left-16 w-72 h-72 rounded-full border border-amber-500/10"></div>
+  <div class="absolute -top-12 -left-8 w-56 h-56 rounded-full border border-amber-500/10"></div>
+  <div class="relative flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-amber-950/40 pb-4 mb-5">
     <div>
-      <div class="flex items-center gap-2 text-xs font-mono text-amber-400 uppercase font-semibold">
-        <span>🗺️ STATE-BY-STATE RENAISSANCE EXPLORER</span>
-        <span aria-hidden="true">·</span>
-        <span>sitavani.com</span>
-      </div>
-      <h2 class="text-xl sm:text-2xl font-serif font-bold text-slate-100 mt-1">
-        {language === 'hi' ? 'भारत सांस्कृतिक एवं तकनीकी पुनरुद्धार मानचित्र' : 'Bharat Cultural & Infrastructure Renaissance Map'}
-      </h2>
+      <p class="text-xs font-mono text-amber-400 uppercase tracking-widest font-semibold">Bharat Renaissance Map</p>
+      <h2 id="renaissance-map-title" class="text-xl sm:text-2xl font-serif font-bold text-slate-100 mt-1">{language === 'hi' ? 'स्रोत-आधारित राज्य विकास' : 'State-level sourced developments'}</h2>
     </div>
-
-    <div class="text-xs font-mono text-slate-400">
-      <span>Active State Hubs: <strong class="text-amber-400">28 States / 8 UTs</strong></span>
-    </div>
+    <span class="text-[10px] font-mono uppercase tracking-wider text-slate-500 border border-slate-800 rounded px-2 py-1">Sourced records only</span>
   </div>
-
-  <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-    <div class="lg:col-span-5 grid grid-cols-2 gap-2.5">
-      {STATE_PROJECTS_DATA.map((st, idx) => (
-        <div
-          class={`p-3 text-left rounded-lg border transition-all text-xs font-mono flex flex-col justify-between min-h-[85px] ${
-            idx === 0
-              ? 'bg-amber-500/15 border-amber-500/60 text-amber-200 shadow-md'
-              : 'bg-[#0E121D] border-slate-800 text-slate-400'
-          }`}
-        >
-          <div class="flex items-center justify-between w-full">
-            <span class="font-bold text-slate-200">{language === 'hi' ? st.state_name_hi : st.state_name}</span>
-            <span class="px-1.5 py-0.5 rounded bg-slate-900 text-[10px] text-amber-400 font-bold border border-slate-800">
-              {st.state_code}
-            </span>
-          </div>
-          <div class="text-[11px] text-slate-400 mt-1">
-            {st.active_projects_count} Major Projects
-          </div>
-        </div>
-      ))}
-    </div>
-
-    <div class="lg:col-span-7 bg-[#0E121E] border border-amber-950/40 rounded-xl p-6 flex flex-col justify-between min-h-[290px]">
-      <div class="space-y-4">
-        <div class="flex items-center justify-between flex-wrap gap-2">
-          <span class="px-2.5 py-1 rounded-md bg-amber-500/20 text-amber-300 font-mono text-xs border border-amber-500/40 uppercase font-semibold">
-            {selectedState.status_badge}
-          </span>
-          <span class="text-xs font-mono text-slate-400">
-            State ID: {selectedState.state_code}
-          </span>
-        </div>
-
-        <h3 class="text-xl sm:text-2xl font-serif font-bold text-slate-100">
-          {language === 'hi' ? selectedState.lead_project_hi : selectedState.lead_project}
-        </h3>
-
-        <p class="text-sm text-slate-300 leading-relaxed font-sans">
-          {language === 'hi' ? selectedState.description_hi : selectedState.description_en}
-        </p>
-      </div>
-
-      <div class="pt-4 mt-4 border-t border-slate-800 flex items-center justify-between">
-        <div class="flex items-center gap-2 text-xs font-mono text-slate-400">
-          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span>Verified State Milestone</span>
-        </div>
-        <span class="text-xs font-mono uppercase tracking-wider font-semibold text-amber-400 flex items-center gap-1">
-          {language === 'hi' ? 'संबंधित रपट ↗' : 'View Corridor ↗'}
-        </span>
-      </div>
+  <div class="relative min-h-48 rounded-xl border border-dashed border-slate-700/80 bg-[#0E121D]/70 flex items-center justify-center p-6 text-center">
+    <div class="max-w-lg">
+      <span class="text-3xl text-amber-500/60" aria-hidden="true">◇</span>
+      <p class="mt-3 text-sm text-slate-300">No state-level records with source links are configured yet. The map will populate as editors publish sourced heritage, infrastructure, energy, and manufacturing reports.</p>
     </div>
   </div>
 </section>

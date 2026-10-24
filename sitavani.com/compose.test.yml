@@ -1,0 +1,16 @@
+services:
+  postgres-test:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: sitavani_test
+      POSTGRES_USER: sitavani_test
+      POSTGRES_PASSWORD: sitavani-local-test-only
+    ports:
+      - "127.0.0.1:55432:5432"
+    tmpfs:
+      - /var/lib/postgresql/data:rw,noexec,nosuid,size=512m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sitavani_test -d sitavani_test"]
+      interval: 2s
+      timeout: 2s
+      retries: 30

@@ -1,10 +1,11 @@
 import type { APIRoute } from 'astro';
-import { runIngestion } from '../../../../data/store';
+import { recordUnavailableIngestion } from '../../../../data/store';
+import { protectAdminRequest } from '../../../../lib/adminAuth';
+import { jsonError } from '../../../../lib/api';
 
-export const POST: APIRoute = () => {
-  const result = runIngestion();
-  return new Response(JSON.stringify(result), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' }
-  });
+export const POST: APIRoute = ({ request }) => {
+  const denied = protectAdminRequest(request, true);
+  if (denied) return denied;
+  const result = recordUnavailableIngestion();
+  return jsonError(result.error, result.status);
 };

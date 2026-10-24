@@ -9,8 +9,9 @@ interface Props {
 
 const { article, language = 'dual' } = Astro.props;
 const categoryLabel = CATEGORY_LABELS[article.category] || CATEGORY_LABELS['HERITAGE'];
-const formattedDate = article.approved_at 
-  ? new Date(article.approved_at).toLocaleDateString(language === 'hi' ? 'hi-IN' : 'en-US', {
+const publishedDate = article.published_at || article.approved_at || article.created_at;
+const formattedDate = publishedDate
+  ? new Date(publishedDate).toLocaleDateString(language === 'hi' ? 'hi-IN' : 'en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric'
@@ -88,5 +89,8 @@ const formattedDate = article.approved_at
       </div>
 
     </div>
+  </div>
+  <div class="mt-4 text-right">
+    <a href={`/articles/${encodeURIComponent(article.id)}`} class="text-xs font-mono text-amber-400 hover:text-amber-300">Open article page →</a>
   </div>
 </section>

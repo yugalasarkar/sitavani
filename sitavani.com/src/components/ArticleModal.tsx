@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Article, DisplayLanguage } from '../types';
 import { CATEGORY_LABELS } from '../utils/lang';
 
@@ -18,6 +18,15 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
     language === 'dual' ? 'side-by-side' : 'default'
   );
 
+  useEffect(() => {
+    if (!article) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [article, onClose]);
+
   if (!article) return null;
 
   const categoryLabel = CATEGORY_LABELS[article.category];
@@ -32,6 +41,10 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
     <div className="fixed inset-0 z-50 overflow-y-auto bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 lg:p-8 animate-fade-in">
       <div 
         className="relative w-full max-w-4xl bg-[#090B10] border border-amber-900/40 rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        role="dialog"
+        aria-modal="true"
+        aria-label={article.title}
+        tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -110,7 +123,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
                   {article.summary_hi || article.summary}
                 </p>
                 <div className="text-sm font-hindi-serif text-slate-300 leading-relaxed pt-2 space-y-3">
-                  <p>{article.summary_hi ? `${article.summary_hi} इस ऐतिहासिक घटनाक्रम की पुष्टि आधिकारिक अभिलेखों एवं सांस्कृतिक मंत्रालयों के अभिलेखों से की गई है।` : article.summary}</p>
+                  <p>{article.summary_hi || article.summary}</p>
                 </div>
               </div>
             </div>
@@ -153,12 +166,12 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
           {/* Cryptographic & Provenance Metadata Box */}
           <div className="rounded-lg border border-slate-800 bg-[#0B0D13] p-5 space-y-3 font-mono text-xs">
             <div className="text-slate-400 uppercase tracking-wider font-semibold border-b border-slate-800/80 pb-2">
-              Cryptographic Provenance & Audit Log
+              Source and article metadata
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <span className="text-slate-500 block text-[11px]">Primary Source Endpoint:</span>
+                <span className="text-slate-500 block text-[11px]">Original article:</span>
                 <a
                   href={article.original_url}
                   target="_blank"
@@ -170,7 +183,7 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
               </div>
 
               <div>
-                <span className="text-slate-500 block text-[11px]">Ingestion Timestamp:</span>
+                <span className="text-slate-500 block text-[11px]">Article record created:</span>
                 <span className="text-slate-300">{new Date(article.created_at).toLocaleString()}</span>
               </div>
 
@@ -208,13 +221,14 @@ export const ArticleModal: React.FC<ArticleModalProps> = ({
 
         {/* Modal Footer */}
         <div className="px-6 py-3.5 border-t border-slate-800 flex items-center justify-between bg-[#0C0E15]">
+          <a href={`/articles/${encodeURIComponent(article.id)}`} className="text-xs font-mono text-slate-300 hover:text-amber-300">Open article page</a>
           <a
             href={article.original_url}
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs font-mono text-amber-400 hover:text-amber-300 flex items-center gap-1.5"
           >
-            <span>Visit Verified Publisher Portal</span>
+            <span>Visit source website</span>
             <span>↗</span>
           </a>
 

@@ -1,0 +1,62 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import { getPublishedArticle } from '../../data/store';
+import { CATEGORY_LABELS } from '../../utils/lang';
+
+let article: Awaited<ReturnType<typeof getPublishedArticle>>;
+let databaseUnavailable = false;
+try {
+  article = Astro.params.id ? await getPublishedArticle(Astro.params.id) : undefined;
+  if (!article) Astro.response.status = 404;
+} catch {
+  Astro.response.status = 503;
+  databaseUnavailable = true;
+}
+const canonicalUrl = article ? `https://sitavani.com/articles/${encodeURIComponent(article.id)}` : 'https://sitavani.com/';
+const category = article ? CATEGORY_LABELS[article.category] : undefined;
+const date = article?.published_at || article?.approved_at || article?.created_at;
+---
+
+<Layout
+  title={databaseUnavailable ? 'Archive unavailable | SITAVANI' : article ? `${article.title} | SITAVANI` : 'Article not found | SITAVANI'}
+  description={databaseUnavailable ? 'The editorial archive is temporarily unavailable.' : article?.summary || 'This article is unavailable or has not been published.'}
+  canonicalUrl={canonicalUrl}
+>
+  <div class="min-h-screen flex flex-col bg-[#07090E] text-slate-100">
+    <Header />
+    <main class="flex-grow max-w-4xl w-full mx-auto px-4 py-12">
+      {databaseUnavailable ? (
+        <section class="rounded-xl border border-amber-900/30 bg-[#0A0C12] p-8">
+          <h1 class="text-3xl font-serif font-bold">The archive is temporarily unavailable</h1>
+          <p class="mt-3 text-sm text-slate-400">The editorial database could not be reached. Please try again shortly.</p>
+        </section>
+      ) : article && category ? (
+        <article class="rounded-xl border border-amber-900/30 bg-[#0A0C12] p-6 sm:p-10">
+          <p class="font-mono text-xs uppercase tracking-widest text-amber-400">{category.en} · {article.source_name}</p>
+          <h1 class="mt-4 text-3xl sm:text-5xl font-serif font-bold leading-tight">{article.title}</h1>
+          {article.title_hi && <h2 class="mt-3 text-xl sm:text-2xl font-hindi-serif text-amber-200">{article.title_hi}</h2>}
+          <p class="mt-6 text-lg text-slate-300 leading-relaxed">{article.summary}</p>
+          {article.summary_hi && <p class="mt-3 font-hindi-serif text-base text-slate-300 leading-relaxed">{article.summary_hi}</p>}
+          <div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-slate-800 py-3 text-xs font-mono text-slate-400">
+            <time datetime={date}>{date ? new Date(date).toLocaleDateString('en-IN', { dateStyle: 'long' }) : 'Date unavailable'}</time>
+            <span>Source attribution: {article.source_name}</span>
+            <a href={article.original_url} target="_blank" rel="noopener noreferrer" class="text-amber-400 hover:text-amber-300">Read original source ↗</a>
+          </div>
+          <div class="mt-8 space-y-5 text-base leading-relaxed text-slate-200">
+            {article.content_raw ? <p>{article.content_raw}</p> : <p>{article.summary}</p>}
+          </div>
+          {article.editorial_notes && <aside class="mt-8 rounded border border-amber-900/40 bg-amber-950/10 p-4 text-sm text-amber-200"><strong>Editorial note:</strong> {article.editorial_notes}</aside>}
+        </article>
+      ) : (
+        <section class="rounded-xl border border-amber-900/30 bg-[#0A0C12] p-8">
+          <h1 class="text-3xl font-serif font-bold">Article not found</h1>
+          <p class="mt-3 text-sm text-slate-400">This article is unavailable or has not been published.</p>
+          <a href="/" class="inline-block mt-6 text-sm text-amber-400 hover:text-amber-300">Return to SITAVANI</a>
+        </section>
+      )}
+    </main>
+    <Footer />
+  </div>
+</Layout>
