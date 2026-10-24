@@ -19,7 +19,7 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [selectedSabha, setSelectedSabha] = useState<string>(currentSabha);
   const [sort, setSort] = useState<'hot' | 'new' | 'top'>(currentSort);
-  const [session, setSession] = useState<{ authenticated: boolean; address?: string; isAdmin?: boolean } | null>(null);
+  const [session, setSession] = useState<{ authenticated: boolean; address?: string; isAdmin?: boolean; user?: any } | null>(null);
   
   // Post creation modal
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -114,17 +114,25 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
         body: JSON.stringify({ targetType: 'POST', targetId: postId, value })
       });
       if (!res.ok) {
-        // Revert on failure
         loadPosts(selectedSabha, sort);
       }
     } catch (e) {
+      console.error(e);
       loadPosts(selectedSabha, sort);
     }
   };
 
   const handleCreatePost = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTitle.trim()) return;
+    if (!session?.authenticated) {
+      setPostError('Please connect your wallet first.');
+      return;
+    }
+    if (!newTitle.trim() || !newContent.trim()) {
+      setPostError('Title and content are required.');
+      return;
+    }
+
     setSubmitting(true);
     setPostError(null);
 
@@ -133,202 +141,269 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: newTitle,
-          content: newContent,
           sabha_slug: newSabha,
-          media_url: newMediaUrl || undefined,
-          is_pinned: isPinned
+          title: newTitle.trim(),
+          content: newContent.trim(),
+          media_url: newMediaUrl.trim() || undefined,
+          is_pinned: session?.isAdmin ? isPinned : false,
+          is_official_dispatch: session?.isAdmin ? true : false
         })
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || 'Failed to submit dispatch.');
+        const errJson = await res.json();
+        throw new Error(errJson.error || 'Failed to publish post.');
       }
 
+      const created = await res.json();
+      setPosts(prev => [created.post, ...prev]);
+      setShowCreateModal(false);
       setNewTitle('');
       setNewContent('');
       setNewMediaUrl('');
       setIsPinned(false);
-      setShowCreateModal(false);
-      loadPosts(selectedSabha, sort);
     } catch (err: any) {
-      setPostError(err?.message || 'Error publishing post.');
+      setPostError(err?.message || 'Publication failed.');
     } finally {
       setSubmitting(false);
     }
   };
 
+  // --- ADMIN MODERATION ACTIONS (दण्डनीति Daṇḍanīti) ---
+  const isAdminViewer = session?.isAdmin || session?.address?.toLowerCase() === '0xd22913b647d905d931e4dbbc36b2eecabb78329b';
+
+  const handleAdminStrike = async (authorAddress: string, postId: string) => {
+    const reason = prompt(`Stated reason for issuing a civilizational warning to ${authorAddress.slice(0, 8)}...\n(Notice: 8 accumulated strikes result in an automatic permanent ban):`);
+    if (!reason || !reason.trim()) return;
+
+    try {
+      const res = await fetch('/api/admin/moderation/warn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userAddress: authorAddress,
+          reason: reason.trim(),
+          targetType: 'POST',
+          targetId: postId
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to issue warning strike');
+      alert(data.message || `Strike recorded. User now has ${data.warnings_count}/8 strikes.`);
+      loadPosts(selectedSabha, sort);
+    } catch (err: any) {
+      alert(err.message || 'Strike could not be recorded.');
+    }
+  };
+
+  const handleAdminFlagMisinfo = async (postId: string) => {
+    const note = prompt('Enter editorial fact-check clarification / rebuttal note:');
+    if (!note || !note.trim()) return;
+
+    try {
+      const res = await fetch('/api/admin/moderation/misinformation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId, note: note.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to flag misinformation');
+      alert('Dispatch marked with Asatya (Falsehood) badge.');
+      loadPosts(selectedSabha, sort);
+    } catch (err: any) {
+      alert(err.message || 'Could not flag misinformation.');
+    }
+  };
+
+  const handleAdminDeletePost = async (postId: string) => {
+    if (!confirm('Are you sure you want to permanently delete this dispatch from public view?')) return;
+    const reason = prompt('Reason for deletion:', 'Violates civilizational truth standards');
+
+    try {
+      const res = await fetch('/api/admin/moderation/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'POST', id: postId, reason: reason || 'Purged by Administrator' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete post');
+      setPosts(prev => prev.filter(p => p.id !== postId));
+    } catch (err: any) {
+      alert(err.message || 'Could not delete post.');
+    }
+  };
+
   return (
     <div className="space-y-6">
-      {/* Sabhas / Mandalas Pill Bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-amber-950">
-        <button
-          onClick={() => handleSabhaChange('all')}
-          className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all whitespace-nowrap border ${
-            selectedSabha === 'all'
-              ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 shadow-sm'
-              : 'bg-[#0D1017] text-slate-400 border-slate-800 hover:border-amber-900/60 hover:text-slate-200'
-          }`}
-        >
-          सर्वे All Mandalas
-        </button>
-        {sabhas.map(s => (
+      {/* Top Controls: Sabha Filter Pills & New Post Trigger */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#0A0C12] border border-amber-950/40">
+        {/* Sabha Category Pills */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-thin scrollbar-thumb-amber-950">
           <button
-            key={s.slug}
-            onClick={() => handleSabhaChange(s.slug)}
-            className={`px-3 py-1.5 text-xs font-medium rounded-full transition-all whitespace-nowrap border ${
-              selectedSabha === s.slug
-                ? 'bg-amber-500/25 text-amber-200 border-amber-400 shadow-sm'
-                : 'bg-[#0D1017] text-slate-400 border-slate-800 hover:border-amber-900/60 hover:text-slate-200'
+            onClick={() => handleSabhaChange('all')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
+              selectedSabha === 'all'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm shadow-amber-500/20'
+                : 'text-slate-400 hover:text-slate-200 hover:bg-[#121620]'
             }`}
           >
-            {s.name_sa}
+            सर्वाणि All Sabhas
           </button>
-        ))}
-      </div>
-
-      {/* Sorter & Create Post Action Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0A0C12] border border-amber-950/40 rounded-xl p-3">
-        {/* Sanskrit Tabs */}
-        <div className="flex items-center gap-1.5 bg-[#07090E] p-1 rounded-lg border border-slate-800/80 text-xs font-medium">
-          <button
-            onClick={() => handleSortChange('hot')}
-            className={`px-3 py-1.5 rounded-md transition-all ${
-              sort === 'hot' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-400 hover:text-slate-200'
-            }`}
-            title="Hot / Trending Dispatches"
-          >
-            🔥 लोकप्रिय Lokapriya
-          </button>
-          <button
-            onClick={() => handleSortChange('new')}
-            className={`px-3 py-1.5 rounded-md transition-all ${
-              sort === 'new' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-400 hover:text-slate-200'
-            }`}
-            title="Recent Submissions"
-          >
-            ✨ नवीन Navīna
-          </button>
-          <button
-            onClick={() => handleSortChange('top')}
-            className={`px-3 py-1.5 rounded-md transition-all ${
-              sort === 'top' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-400 hover:text-slate-200'
-            }`}
-            title="Highest Accord Score"
-          >
-            🏆 श्रेष्ठ Śreṣṭha
-          </button>
+          {sabhas.map(s => (
+            <button
+              key={s.slug}
+              onClick={() => handleSabhaChange(s.slug)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap flex items-center gap-1.5 ${
+                selectedSabha === s.slug
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 shadow-sm shadow-amber-500/20'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-[#121620]'
+              }`}
+            >
+              <span>{s.icon}</span>
+              <span>{s.name_sa}</span>
+            </button>
+          ))}
         </div>
 
-        {/* Create Post Prompt */}
+        {/* Create Post Button */}
         <button
           onClick={() => {
             if (!session?.authenticated) {
-              alert('Please connect your MetaMask wallet to publish.');
+              alert('Please connect your MetaMask wallet first to create dispatches.');
               return;
             }
             setShowCreateModal(true);
           }}
-          className="flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 border border-amber-500/40 hover:border-amber-400 text-amber-300 rounded-lg text-xs font-medium transition-all"
+          className="shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-lg hover:brightness-110 shadow-md shadow-amber-500/20 transition-all"
         >
-          <span className="font-bold text-sm">+</span>
-          <span>प्रकाशनम् Write Dispatch / Post</span>
+          <span>✍️</span>
+          <span>प्रकाशनम् New Dispatch</span>
         </button>
       </div>
 
-      {/* Post Modal */}
+      {/* Sorting Tabs: Hot / New / Top */}
+      <div className="flex items-center justify-between border-b border-amber-950/40 pb-2">
+        <div className="flex items-center gap-2 text-xs font-mono">
+          <span className="text-slate-500">क्रमः Sort:</span>
+          {(['hot', 'new', 'top'] as const).map(mode => (
+            <button
+              key={mode}
+              onClick={() => handleSortChange(mode)}
+              className={`px-2.5 py-1 rounded transition-colors ${
+                sort === mode
+                  ? 'bg-amber-500/15 text-amber-300 font-bold border border-amber-500/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              {mode === 'hot' && '🔥 लोकप्रिय Lokapriya'}
+              {mode === 'new' && '✨ नवीन Navīna'}
+              {mode === 'top' && '🏆 श्रेष्ठ Śreṣṭha'}
+            </button>
+          ))}
+        </div>
+
+        <div className="text-[11px] font-mono text-slate-500">
+          Showing {posts.length} entries
+        </div>
+      </div>
+
+      {/* Post Creation Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-[#0D1017] border border-amber-900/60 rounded-xl max-w-2xl w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-amber-950/60 pb-3">
-              <h2 className="text-base font-serif font-bold text-amber-300">
-                नव प्रकाशनम् · Create Dharmic Dispatch
-              </h2>
-              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-200 text-lg">✕</button>
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#0B0E17] border border-amber-900/60 rounded-2xl max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 className="font-serif font-bold text-base text-slate-100 flex items-center gap-2">
+                <span>संसद्-प्रकाशनम् Create Community Dispatch</span>
+              </h3>
+              <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-white">✕</button>
             </div>
 
-            {postError && <p className="text-xs text-red-400 bg-red-950/30 p-2.5 rounded border border-red-900/50">{postError}</p>}
+            {postError && (
+              <p className="p-3 text-xs text-rose-300 bg-rose-950/40 border border-rose-900/60 rounded-lg font-mono">
+                {postError}
+              </p>
+            )}
 
-            <form onSubmit={handleCreatePost} className="space-y-4">
+            <form onSubmit={handleCreatePost} className="space-y-4 text-xs font-mono">
               <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1">मण्डलम् Sabha / Community</label>
+                <label className="block text-slate-400 mb-1">मण्डल Sabha Assembly</label>
                 <select
                   value={newSabha}
                   onChange={e => setNewSabha(e.target.value)}
-                  className="w-full bg-[#07090E] border border-slate-800 rounded-md p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                  className="w-full bg-[#07090E] border border-slate-800 rounded-lg p-2.5 text-slate-100 focus:border-amber-500"
                 >
                   {sabhas.map(s => (
                     <option key={s.slug} value={s.slug}>
-                      {s.name_sa} ({s.name_en})
+                      {s.icon} {s.name_sa} ({s.name_en})
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1">शीर्षकम् Title *</label>
+                <label className="block text-slate-400 mb-1">शीर्षकम् Headline (Truth-focused)</label>
                 <input
                   type="text"
                   required
+                  placeholder="Accurate, non-sensationalized headline..."
                   value={newTitle}
                   onChange={e => setNewTitle(e.target.value)}
-                  placeholder="Enter scholarly title, dispatch headline or research premise..."
-                  className="w-full bg-[#07090E] border border-slate-800 rounded-md p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                  className="w-full bg-[#07090E] border border-slate-800 rounded-lg p-2.5 text-slate-100 text-sm font-sans focus:border-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1">विवरणम् Content / Exegesis / Text</label>
+                <label className="block text-slate-400 mb-1">वृत्तान्तः Body & Citations (Markdown / Text)</label>
                 <textarea
-                  rows={4}
+                  required
+                  rows={6}
+                  placeholder="Cite epigraphic, astronomical or primary historical evidence..."
                   value={newContent}
                   onChange={e => setNewContent(e.target.value)}
-                  placeholder="Write research text, shastric commentary or primary source citation..."
-                  className="w-full bg-[#07090E] border border-slate-800 rounded-md p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                  className="w-full bg-[#07090E] border border-slate-800 rounded-lg p-2.5 text-slate-100 text-xs font-sans leading-relaxed focus:border-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono text-slate-400 mb-1">दृश्य चित्रम् Media / Image HTTPS URL (Optional)</label>
+                <label className="block text-slate-400 mb-1">चित्र-सङ्केतः Media Image URL (Optional)</label>
                 <input
                   type="url"
+                  placeholder="https://..."
                   value={newMediaUrl}
                   onChange={e => setNewMediaUrl(e.target.value)}
-                  placeholder="https://... image or archive URL"
-                  className="w-full bg-[#07090E] border border-slate-800 rounded-md p-2 text-xs text-slate-200 focus:outline-none focus:border-amber-500"
+                  className="w-full bg-[#07090E] border border-slate-800 rounded-lg p-2 text-slate-100 focus:border-amber-500"
                 />
               </div>
 
               {session?.isAdmin && (
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                   <input
                     type="checkbox"
-                    id="pin_dispatch"
+                    id="pin-post"
                     checked={isPinned}
                     onChange={e => setIsPinned(e.target.checked)}
-                    className="rounded border-slate-800 text-amber-500 focus:ring-0"
+                    className="accent-amber-500"
                   />
-                  <label htmlFor="pin_dispatch" className="text-xs text-amber-300 font-medium">
-                    📌 मुखपृष्ठे कीलयतु · Pin as Head Dispatch on Home Page
+                  <label htmlFor="pin-post" className="text-amber-300 font-bold cursor-pointer">
+                    📌 Pin as Official Sovereign Dispatch (आधिकारिक घोषणा)
                   </label>
                 </div>
               )}
 
-              <div className="flex justify-end gap-3 pt-3 border-t border-amber-950/60">
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 text-xs text-slate-400 hover:text-slate-200"
+                  className="px-4 py-2 border border-slate-700 text-slate-400 hover:text-white rounded-lg"
                 >
-                  Cancel
+                  विराम Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 text-xs font-semibold rounded-md bg-gradient-to-r from-amber-500 to-orange-500 text-black hover:from-amber-400 hover:to-orange-400 transition-all shadow"
+                  className="px-5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold uppercase rounded-lg hover:brightness-110 disabled:opacity-50"
                 >
-                  {submitting ? 'प्रसारणम्... Publishing...' : 'प्रकाशयतु Publish'}
+                  {submitting ? 'प्रसारणम् Publishing...' : 'सम्भाष Publish Dispatch'}
                 </button>
               </div>
             </form>
@@ -336,67 +411,65 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
         </div>
       )}
 
-      {/* Posts Feed */}
+      {/* Feed Stream */}
       <div className="space-y-4">
         {posts.length === 0 ? (
-          <div className="rounded-xl border border-amber-900/30 bg-[#0A0C12] p-12 text-center space-y-3">
-            <p className="font-serif text-lg text-slate-300">न कोऽपि विमर्शः प्राप्तः · No dispatches found in this Mandala</p>
-            <p className="text-xs text-slate-500 font-mono">Be the first to publish or select another community.</p>
+          <div className="p-12 text-center rounded-xl bg-[#0A0C12] border border-amber-950/40 text-slate-400 space-y-2">
+            <p className="font-serif text-lg text-slate-200">न कोऽपि संवादः अस्मिन् मण्डले।</p>
+            <p className="text-xs text-slate-500 font-mono">No discussions found in this Sabha yet. Be the first to discourse!</p>
           </div>
         ) : (
           posts.map(post => {
             const sabha = sabhas.find(s => s.slug === post.sabha_slug);
-            const userVote = post.user_vote || 0;
             const authorShort = post.author_address.slice(0, 6) + '...' + post.author_address.slice(-4);
-            const formattedDate = new Date(post.created_at).toLocaleDateString(language === 'hi' ? 'hi-IN' : 'en-US', {
+            const formattedDate = new Date(post.created_at).toLocaleDateString(undefined, {
               month: 'short',
               day: 'numeric',
-              year: 'numeric'
+              hour: '2-digit',
+              minute: '2-digit'
             });
 
             return (
               <article
                 key={post.id}
-                className={`rounded-xl border transition-all duration-200 overflow-hidden bg-[#0A0C12] flex items-stretch ${
+                className={`flex rounded-xl bg-[#0A0C12] border transition-all hover:border-amber-800/60 overflow-hidden shadow-lg ${
                   post.is_pinned
-                    ? 'border-amber-500/50 shadow-lg shadow-amber-500/5'
-                    : 'border-amber-950/30 hover:border-amber-800/50'
+                    ? 'border-amber-500/50 bg-gradient-to-r from-amber-950/20 via-[#0A0C12] to-[#0A0C12]'
+                    : post.is_misinformation
+                    ? 'border-rose-900/60 bg-rose-950/10'
+                    : 'border-amber-950/30'
                 }`}
               >
-                {/* Voting Column (Reddit Style) */}
-                <div className="w-14 sm:w-16 bg-[#07090E]/80 border-r border-amber-950/20 p-2 flex flex-col items-center justify-start gap-1">
+                {/* Left Voting Column */}
+                <div className="flex flex-col items-center justify-start p-3 bg-[#080A0F] border-r border-amber-950/30 w-12 sm:w-14 shrink-0 font-mono">
                   <button
                     onClick={() => handleVote(post.id, 1)}
-                    className={`p-1.5 rounded transition-all ${
-                      userVote === 1
-                        ? 'text-amber-400 bg-amber-500/20 scale-110'
-                        : 'text-slate-500 hover:text-amber-300 hover:bg-slate-800/40'
+                    className={`p-1 rounded transition-colors ${
+                      post.user_vote === 1 ? 'text-amber-400 bg-amber-500/10' : 'text-slate-500 hover:text-amber-300'
                     }`}
-                    title="सम्मति Sammati (Accord / Upvote)"
+                    title="सम्मति Sammati (Accord)"
                   >
                     ▲
                   </button>
-                  <span className={`text-xs font-mono font-bold ${
-                    userVote === 1 ? 'text-amber-400' : userVote === -1 ? 'text-blue-400' : 'text-slate-300'
+                  <span className={`text-xs font-bold my-1 ${
+                    post.score > 0 ? 'text-amber-400' : post.score < 0 ? 'text-rose-400' : 'text-slate-400'
                   }`}>
                     {post.score}
                   </span>
                   <button
                     onClick={() => handleVote(post.id, -1)}
-                    className={`p-1.5 rounded transition-all ${
-                      userVote === -1
-                        ? 'text-blue-400 bg-blue-500/20 scale-110'
-                        : 'text-slate-500 hover:text-blue-300 hover:bg-slate-800/40'
+                    className={`p-1 rounded transition-colors ${
+                      post.user_vote === -1 ? 'text-rose-400 bg-rose-500/10' : 'text-slate-500 hover:text-rose-400'
                     }`}
-                    title="असम्मति Asammati (Dissent / Downvote)"
+                    title="असम्मति Asammati (Dissent)"
                   >
                     ▼
                   </button>
                 </div>
 
-                {/* Post Body */}
-                <div className="flex-1 p-4 sm:p-5 space-y-3">
-                  {/* Meta Header */}
+                {/* Right Post Body */}
+                <div className="flex-grow p-4 sm:p-5 space-y-3">
+                  {/* Top Metadata Row */}
                   <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-slate-400">
                     <a
                       href={`/s/${post.sabha_slug}`}
@@ -417,6 +490,20 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
                         <span>{authorShort}</span>
                       )}
                     </span>
+
+                    {/* Author Warnings Bar */}
+                    {post.author_warnings && post.author_warnings > 0 ? (
+                      <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono" title="8 warnings result in permanent account ban">
+                        ⚠️ {post.author_warnings}/8 Strikes
+                      </span>
+                    ) : null}
+
+                    {post.author_is_banned && (
+                      <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-mono">
+                        🚫 BANNED
+                      </span>
+                    )}
+
                     <span className="text-amber-700">·</span>
                     <span className="tabular-nums">{formattedDate}</span>
 
@@ -432,6 +519,19 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
                       </span>
                     )}
                   </div>
+
+                  {/* Misinformation Notice Banner */}
+                  {post.is_misinformation && (
+                    <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-600/70 text-rose-200 text-xs font-mono space-y-1">
+                      <div className="font-bold flex items-center gap-1.5 text-rose-400">
+                        <span>⚠️</span>
+                        <span>मिथ्या / असत्य सूचना (Falsehood / Misinformation Notice)</span>
+                      </div>
+                      <p className="text-slate-300">
+                        {post.admin_warning_note || 'This dispatch contains unverified or deceptive assertions rejected by the editorial desk.'}
+                      </p>
+                    </div>
+                  )}
 
                   {/* Title */}
                   <h2 className="text-lg sm:text-xl font-serif font-bold text-slate-100 hover:text-amber-200 transition-colors">
@@ -485,6 +585,34 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
                       </a>
                     </div>
                   </div>
+
+                  {/* Inline Administrative Moderation Toolbar */}
+                  {isAdminViewer && (
+                    <div className="mt-2 pt-2 border-t border-amber-900/30 flex flex-wrap items-center justify-end gap-2 text-[11px] font-mono">
+                      <span className="text-amber-500/80 mr-auto flex items-center gap-1 font-semibold">
+                        <span>⚖️ Daṇḍanīti (8-Strike Rule):</span>
+                      </span>
+                      <button
+                        onClick={() => handleAdminStrike(post.author_address, post.id)}
+                        className="px-2 py-0.5 rounded bg-amber-950/60 hover:bg-amber-900 text-amber-300 border border-amber-700/60 transition-colors"
+                        title="Issue 1 Strike (Automatic ban on reaching 8 strikes)"
+                      >
+                        ⚠️ Issue Strike ({post.author_warnings || 0}/8)
+                      </button>
+                      <button
+                        onClick={() => handleAdminFlagMisinfo(post.id)}
+                        className="px-2 py-0.5 rounded bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-700/60 transition-colors"
+                      >
+                        🚩 Flag Asatya (Falsehood)
+                      </button>
+                      <button
+                        onClick={() => handleAdminDeletePost(post.id)}
+                        className="px-2 py-0.5 rounded bg-red-950/80 hover:bg-red-900 text-red-200 border border-red-700/80 transition-colors"
+                      >
+                        🗑️ Delete Post
+                      </button>
+                    </div>
+                  )}
                 </div>
               </article>
             );

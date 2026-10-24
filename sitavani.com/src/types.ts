@@ -127,6 +127,11 @@ export interface User {
   role: UserRole;
   karma_score: number;
   is_verified_authority: boolean;
+  warnings_count?: number;
+  is_banned?: boolean;
+  ban_reason?: string | null;
+  banned_at?: string | null;
+  banned_by?: string | null;
   created_at: string;
 }
 
@@ -149,6 +154,8 @@ export interface Post {
   author_name?: string;
   author_role?: UserRole;
   author_is_verified?: boolean;
+  author_warnings?: number;
+  author_is_banned?: boolean;
   title: string;
   content: string;
   media_url?: string | null;
@@ -161,6 +168,10 @@ export interface Post {
   score: number;
   comments_count: number;
   chain_tx_hash?: string | null;
+  is_deleted?: boolean;
+  deleted_reason?: string | null;
+  is_misinformation?: boolean;
+  admin_warning_note?: string | null;
   user_vote?: number;
   created_at: string;
 }
@@ -173,11 +184,36 @@ export interface Comment {
   author_name?: string;
   author_role?: UserRole;
   author_is_verified?: boolean;
+  author_warnings?: number;
+  author_is_banned?: boolean;
   content: string;
   upvotes: number;
   downvotes: number;
   score: number;
+  is_deleted?: boolean;
+  deleted_reason?: string | null;
   user_vote?: number;
   created_at: string;
   replies?: Comment[];
+}
+
+export interface UserWarning {
+  id: number;
+  user_address: string;
+  warned_by: string;
+  reason: string;
+  target_type: 'POST' | 'COMMENT' | 'DIRECT';
+  target_id?: string | null;
+  warning_index: number;
+  created_at: string;
+}
+
+export interface ModerationLog {
+  id: number;
+  admin_address: string;
+  action_type: string;
+  target_id?: string | null;
+  target_address?: string | null;
+  reason?: string | null;
+  created_at: string;
 }

@@ -54,10 +54,10 @@ export const POST: APIRoute = async ({ request }) => {
       status: 201,
       headers: { 'Content-Type': 'application/json' }
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Error adding comment:', err);
-    return new Response(JSON.stringify({ error: 'Failed to record commentary.' }), {
-      status: 500,
+    return new Response(JSON.stringify({ error: err?.message || 'Failed to record commentary.' }), {
+      status: err?.message?.includes('banned') ? 403 : 500,
       headers: { 'Content-Type': 'application/json' }
     });
   }

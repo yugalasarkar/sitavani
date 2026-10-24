@@ -10,6 +10,9 @@ interface SessionData {
     role: string;
     karma_score: number;
     is_verified_authority: boolean;
+    warnings_count?: number;
+    is_banned?: boolean;
+    ban_reason?: string | null;
   } | null;
 }
 
@@ -51,11 +54,7 @@ export const WalletNav: React.FC = () => {
       if (!address) throw new Error('No wallet address selected.');
 
       // 1. Fetch challenge nonce
-      const nonceRes = await fetch('/api/auth/nonce', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ address })
-      });
+      const nonceRes = await fetch(`/api/auth/nonce?address=${encodeURIComponent(address)}`);
       if (!nonceRes.ok) throw new Error('Failed to retrieve authentication challenge.');
       const { nonce, message } = await nonceRes.json();
 
@@ -102,14 +101,27 @@ export const WalletNav: React.FC = () => {
     const shortAddr = session.address.slice(0, 6) + '...' + session.address.slice(-4);
     const karma = session.user?.karma_score ?? 108;
     const isAcharya = session.isAdmin || session.user?.role === 'ADMIN' || session.user?.role === 'ACHARYA';
+    const warnings = session.user?.warnings_count || 0;
+    const isBanned = session.user?.is_banned || false;
 
     return (
       <div className="flex items-center gap-2">
+        {/* Warning Indicator or Ban Badge */}
+        {isBanned ? (
+          <span className="px-2 py-1 rounded bg-rose-950/80 text-rose-300 border border-rose-600/80 text-[10px] font-mono font-bold animate-pulse" title="8 warnings exceeded: Wallet permanently revoked">
+            🚫 निष्कासितः Banned (8/8)
+          </span>
+        ) : warnings > 0 ? (
+          <span className="px-2 py-1 rounded bg-amber-500/20 text-amber-300 border border-amber-500/50 text-[10px] font-mono font-semibold" title="Strict Civilizational Rule: 8 warnings result in permanent expulsion">
+            ⚠️ चेतावनी Chetanā: {warnings}/8
+          </span>
+        ) : null}
+
         {isAcharya && (
           <a
             href="/admin"
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border border-amber-500/60 bg-gradient-to-r from-amber-500/20 to-orange-500/20 text-amber-300 hover:border-amber-400 hover:shadow-lg hover:shadow-amber-500/10 transition-all"
-            title="Ācārya Editorial Desk"
+            title="Ācārya Editorial & Moderation Desk"
           >
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
             <span>सम्पादक Ācārya Desk</span>

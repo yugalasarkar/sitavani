@@ -42,7 +42,6 @@ const { posts } = currentSabha ? await socialRepository.listPosts({
     <Header currentPath={`/s/${sabha}`} language={language} />
 
     {currentSabha && (
-      <!-- Sabha Banner -->
       <div class="border-b border-amber-900/30 bg-gradient-to-r from-amber-950/40 via-[#0A0D15] to-amber-950/20">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div class="flex flex-wrap items-center justify-between gap-4">
@@ -109,7 +108,6 @@ const { posts } = currentSabha ? await socialRepository.listPosts({
             <SocialFeed client:load sabhas={sabhas} initialPosts={posts} initialSabha={currentSabha.slug} />
           </div>
 
-          <!-- Sidebar: Sabha Charter & Kasturi EVM Widget -->
           <div class="lg:col-span-4 space-y-6">
             <div class="bg-[#0B0D13] border border-amber-900/40 rounded-xl p-5 space-y-4">
               <h3 class="text-sm font-bold font-serif text-slate-100 flex items-center gap-2">
@@ -126,7 +124,6 @@ const { posts } = currentSabha ? await socialRepository.listPosts({
               </div>
             </div>
 
-            <!-- Kasturi Chain Status Card -->
             <div class="bg-[#0B0D13] border border-slate-800/80 rounded-xl p-5 space-y-4 shadow-lg shadow-black/40">
               <div class="flex items-center justify-between">
                 <div class="flex items-center gap-2">

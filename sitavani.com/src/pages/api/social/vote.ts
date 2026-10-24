@@ -29,10 +29,10 @@ export const POST: APIRoute = async ({ request }) => {
       status: 200,
       headers: { 'Content-Type': 'application/json' }
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Vote failure:', err);
-    return new Response(JSON.stringify({ error: 'Vote processing failure.' }), {
-      status: 500,
+    return new Response(JSON.stringify({ error: err?.message || 'Vote processing failure.' }), {
+      status: err?.message?.includes('banned') ? 403 : 500,
       headers: { 'Content-Type': 'application/json' }
     });
   }

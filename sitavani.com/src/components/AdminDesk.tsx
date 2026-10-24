@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Article, Source, DaemonLog, NewsCategory, DisplayLanguage } from '../types';
+import { Article, Source, DaemonLog, NewsCategory, DisplayLanguage, User, ModerationLog } from '../types';
 import { CATEGORY_LABELS } from '../utils/lang';
 
 interface AdminDeskProps {
@@ -14,7 +14,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   language,
   onRefreshStats
 }) => {
-  const [activeTab, setActiveTab] = useState<'pending' | 'daemon' | 'sources' | 'archive'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'daemon' | 'sources' | 'archive' | 'moderation'>('pending');
   const [authenticated, setAuthenticated] = useState(false);
   const [checkingSession, setCheckingSession] = useState(true);
   const [authAddress, setAuthAddress] = useState<string | null>(null);
@@ -48,6 +48,13 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   // Daemon state
   const [daemonLogs, setDaemonLogs] = useState<DaemonLog[]>([]);
   const [runningIngest, setRunningIngest] = useState(false);
+
+  // Moderation state (8-Warning & Ban System)
+  const [flaggedUsers, setFlaggedUsers] = useState<User[]>([]);
+  const [moderationLogs, setModerationLogs] = useState<ModerationLog[]>([]);
+  const [loadingModeration, setLoadingModeration] = useState(false);
+  const [targetWalletInput, setTargetWalletInput] = useState('');
+  const [strikeReasonInput, setStrikeReasonInput] = useState('');
 
   // Edit & Publish Modal state
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
@@ -276,6 +283,20 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     }
   };
 
+  // Fetch Moderation Data (Users with warnings & Banned users)
+  const fetchModerationData = async () => {
+    setLoadingModeration(true);
+    try {
+      const data = await adminRequest('/api/admin/moderation/users');
+      setFlaggedUsers(data.users || []);
+      setModerationLogs(data.logs || []);
+    } catch (e) {
+      setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to fetch moderation data.' });
+    } finally {
+      setLoadingModeration(false);
+    }
+  };
+
   useEffect(() => {
     if (!authenticated) return;
     fetchPending();
@@ -286,6 +307,9 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   useEffect(() => {
     if (authenticated && activeTab === 'archive') {
       fetchArchive();
+    }
+    if (authenticated && activeTab === 'moderation') {
+      fetchModerationData();
     }
   }, [authenticated, activeTab, archiveStatusFilter]);
 
@@ -414,6 +438,39 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     }
   };
 
+  // Moderation: Issue Strike (1..8)
+  const handleIssueStrike = async (wallet: string, reason: string) => {
+    if (!wallet.trim() || !reason.trim()) return;
+    try {
+      const data = await adminRequest('/api/admin/moderation/warn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress: wallet.trim(), reason: reason.trim(), targetType: 'DIRECT' })
+      });
+      setActionFeedback({ kind: 'success', message: data.message });
+      setTargetWalletInput('');
+      setStrikeReasonInput('');
+      await fetchModerationData();
+    } catch (e) {
+      setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to issue strike.' });
+    }
+  };
+
+  // Moderation: Pardon / Unban
+  const handlePardonUser = async (wallet: string, resetStrikes: boolean) => {
+    try {
+      const data = await adminRequest('/api/admin/moderation/unban', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userAddress: wallet, resetWarnings: resetStrikes })
+      });
+      setActionFeedback({ kind: 'success', message: data.message });
+      await fetchModerationData();
+    } catch (e) {
+      setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to unban wallet.' });
+    }
+  };
+
   // Loading state
   if (checkingSession) {
     return (
@@ -433,7 +490,6 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     return (
       <main className="min-h-screen bg-[#07090E] text-slate-100 flex items-center justify-center px-4 py-12">
         <div className="w-full max-w-lg rounded-2xl border border-amber-900/50 bg-[#0A0D15] p-6 sm:p-8 shadow-2xl shadow-black/80 space-y-6">
-          {/* Header */}
           <div className="border-b border-amber-950/60 pb-4">
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-amber-400 animate-pulse"></span>
@@ -449,7 +505,6 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
             </p>
           </div>
 
-          {/* Admin Wallet Specification */}
           <div className="p-3.5 rounded-xl bg-[#07080B] border border-amber-900/40 text-xs font-mono space-y-1.5">
             <div className="text-amber-400/90 font-bold flex items-center gap-1.5">
               <span>🏛️</span>
@@ -460,14 +515,12 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
             </div>
           </div>
 
-          {/* Error Message */}
           {authError && (
             <p role="alert" className="rounded-lg border border-rose-900/60 bg-rose-950/40 p-3 text-xs text-rose-300 font-mono">
               ⚠ {authError}
             </p>
           )}
 
-          {/* Wallet Status & Actions */}
           <div className="space-y-4">
             {!hasProvider ? (
               <div className="p-4 rounded-xl border border-rose-900/40 bg-rose-950/20 text-xs text-rose-300 space-y-2">
@@ -521,7 +574,6 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
               </div>
             )}
 
-            {/* Fallback Access Key Accordion */}
             <div className="border-t border-slate-800/80 pt-4">
               <button
                 type="button"
@@ -557,12 +609,15 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     );
   }
 
-  // Authenticated Editorial Desk
+  // Count banned vs in-grace-period users
+  const bannedCount = flaggedUsers.filter(u => u.is_banned).length;
+  const warnedCount = flaggedUsers.filter(u => !u.is_banned && (u.warnings_count || 0) > 0).length;
+
   return (
     <div className="bg-[#07090E] min-h-screen text-slate-100 font-sans pb-24">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
         
-        {/* Top Header of Editorial Desk */}
+        {/* Top Header */}
         <header className="mb-8 border-b border-amber-500/30 pb-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2">
@@ -636,6 +691,22 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
           </button>
 
           <button
+            onClick={() => setActiveTab('moderation')}
+            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+              activeTab === 'moderation'
+                ? 'border-amber-500 text-amber-300 bg-amber-950/20'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span>⚖️ दण्डनीति Daṇḍanīti (8-Warning & Ban System)</span>
+            {bannedCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-500/30 text-rose-300">
+                {bannedCount} Banned
+              </span>
+            )}
+          </button>
+
+          <button
             onClick={() => setActiveTab('daemon')}
             className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
               activeTab === 'daemon'
@@ -671,6 +742,183 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
             <span>अभिलेखागारम् Editorial Archive</span>
           </button>
         </div>
+
+        {/* TAB: MODERATION & 8-WARNING SYSTEM */}
+        {activeTab === 'moderation' && (
+          <div className="space-y-6">
+            {/* 8-Warning Rule Overview Banner */}
+            <div className="p-5 rounded-xl bg-gradient-to-r from-amber-950/30 via-[#0C0F17] to-amber-950/10 border border-amber-900/40 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">⚖️</span>
+                <h3 className="font-serif font-bold text-base text-slate-100">
+                  अष्ट-चेतावनी-दण्डविधानम् | The 8-Warning Progressive Discipline Rule
+                </h3>
+              </div>
+              <p className="text-xs text-slate-300 leading-relaxed max-w-3xl">
+                Civilizational truth policy: Any wallet disseminating fabricated assertions, unverified sources, or malice receives formal strikes.
+                Upon reaching <strong>8 warnings (8/8 Strikes)</strong>, the wallet is automatically and permanently expelled (निष्कासनम्) from posting, commenting, and voting.
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 text-xs font-mono">
+                <div className="p-3 rounded-lg bg-[#07090E] border border-slate-800">
+                  <div className="text-slate-500">Expelled / Banned Wallets</div>
+                  <div className="text-xl font-bold text-rose-400 mt-1">{bannedCount}</div>
+                  <div className="text-[10px] text-slate-500">8/8 Strikes reached</div>
+                </div>
+                <div className="p-3 rounded-lg bg-[#07090E] border border-slate-800">
+                  <div className="text-slate-500">In Grace Period</div>
+                  <div className="text-xl font-bold text-amber-400 mt-1">{warnedCount}</div>
+                  <div className="text-[10px] text-slate-500">1 to 7 strikes active</div>
+                </div>
+                <div className="p-3 rounded-lg bg-[#07090E] border border-slate-800">
+                  <div className="text-slate-500">Audit Trail Events</div>
+                  <div className="text-xl font-bold text-slate-200 mt-1">{moderationLogs.length}</div>
+                  <div className="text-[10px] text-slate-500">Immutable log entries</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Direct Strike Form */}
+            <div className="bg-[#0B0D13] border border-slate-800 rounded-xl p-5 space-y-3">
+              <h4 className="font-serif font-bold text-sm text-slate-200">
+                चेतावनी-प्रदानम् (Issue Direct Strike to Wallet)
+              </h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                <input
+                  type="text"
+                  placeholder="Target Wallet Address (0x...)"
+                  value={targetWalletInput}
+                  onChange={e => setTargetWalletInput(e.target.value)}
+                  className="bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 focus:border-amber-500 focus:outline-none"
+                />
+                <input
+                  type="text"
+                  placeholder="Stated Reason for Strike"
+                  value={strikeReasonInput}
+                  onChange={e => setStrikeReasonInput(e.target.value)}
+                  className="bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 focus:border-amber-500 focus:outline-none sm:col-span-2"
+                />
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => handleIssueStrike(targetWalletInput, strikeReasonInput)}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase rounded hover:brightness-110"
+                >
+                  चेतावनीं ददातु (Issue Strike)
+                </button>
+              </div>
+            </div>
+
+            {/* Flagged / Warned / Banned Users Table */}
+            <div className="bg-[#0B0D13] border border-slate-800 rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-serif font-bold text-sm text-slate-200">
+                  नियन्त्रित-सञ्चिका-तालिका (Enforced Wallets: Warned & Banned)
+                </h4>
+                <button
+                  onClick={fetchModerationData}
+                  className="text-xs font-mono text-amber-400 hover:underline"
+                >
+                  Refresh Data
+                </button>
+              </div>
+
+              {loadingModeration ? (
+                <div className="text-center py-8 text-xs font-mono text-slate-500">
+                  विवरणस्य आनयनम्... Loading enforcement records...
+                </div>
+              ) : flaggedUsers.length === 0 ? (
+                <div className="text-center py-8 text-xs font-mono text-slate-500 border border-dashed border-slate-800 rounded-lg">
+                  सर्वे सदस्याः नियमानुकूलाः। No users currently have active strikes or bans.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800">
+                  {flaggedUsers.map(user => {
+                    const strikes = user.warnings_count || 0;
+                    return (
+                      <div key={user.wallet_address} className="py-3 flex flex-wrap items-center justify-between gap-4 text-xs">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-slate-200 select-all">
+                              {user.wallet_address}
+                            </span>
+                            {user.is_banned ? (
+                              <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-mono font-bold">
+                                🚫 BANNED (8/8 Strikes)
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-semibold">
+                                ⚠️ {strikes} of 8 Strikes
+                              </span>
+                            )}
+                          </div>
+                          {user.ban_reason && (
+                            <p className="text-[11px] text-rose-300/80 font-mono">
+                              Reason: {user.ban_reason}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 font-mono">
+                          {!user.is_banned ? (
+                            <>
+                              <button
+                                onClick={() => {
+                                  const r = prompt(`Issue strike to ${user.wallet_address.slice(0, 8)}:`);
+                                  if (r) handleIssueStrike(user.wallet_address, r);
+                                }}
+                                className="px-2.5 py-1 rounded bg-amber-950/60 hover:bg-amber-900 border border-amber-800 text-amber-300 text-[11px]"
+                              >
+                                + Strike ({strikes + 1}/8)
+                              </button>
+                              <button
+                                onClick={() => handlePardonUser(user.wallet_address, true)}
+                                className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px]"
+                              >
+                                Reset to 0
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => handlePardonUser(user.wallet_address, true)}
+                              className="px-3 py-1 rounded bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 text-[11px] font-semibold"
+                            >
+                              ✓ Pardon & Unban
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Audit Log Table */}
+            <div className="bg-[#0B0D13] border border-slate-800 rounded-xl p-5 space-y-3">
+              <h4 className="font-serif font-bold text-sm text-slate-200">
+                दण्डनीति-लेखागारम् (Moderation Audit Log)
+              </h4>
+              <div className="bg-[#07080B] rounded-lg p-3 font-mono text-xs max-h-60 overflow-y-auto space-y-2 border border-slate-900">
+                {moderationLogs.length === 0 ? (
+                  <span className="text-slate-600">न कोऽपि दण्ड-विवरण-लेखः अधुना पर्यन्तम्।</span>
+                ) : (
+                  moderationLogs.map(log => (
+                    <div key={log.id} className="flex flex-wrap items-center justify-between border-b border-slate-900 pb-1 text-slate-300">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-400 font-bold">[{log.action_type}]</span>
+                        <span>{log.reason || 'No detail'}</span>
+                      </div>
+                      <span className="text-slate-500 text-[10px]">
+                        {new Date(log.created_at).toLocaleString()}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* TAB 1: PENDING QUEUE */}
         {activeTab === 'pending' && (
@@ -780,7 +1028,6 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
         {/* TAB 3: SOURCES */}
         {activeTab === 'sources' && (
           <div className="space-y-6">
-            {/* Add Source Form */}
             <form onSubmit={handleAddSource} className="bg-[#0B0D13] border border-slate-800 rounded-xl p-5 space-y-4">
               <h3 className="text-sm font-bold font-serif text-slate-200">
                 नूतन-स्रोत-संयोजनम् (Add Ingestion Source)
@@ -819,7 +1066,6 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
               </div>
             </form>
 
-            {/* Sources List */}
             <div className="grid grid-cols-1 gap-3">
               {sources.map(src => (
                 <div key={src.id} className="bg-[#0B0D13] border border-slate-800/80 rounded-xl p-4 flex items-center justify-between gap-4">

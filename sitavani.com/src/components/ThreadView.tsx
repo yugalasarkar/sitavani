@@ -10,7 +10,7 @@ interface ThreadViewProps {
 export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initialComments, sabhas }) => {
   const [post, setPost] = useState<Post>(initialPost);
   const [comments, setComments] = useState<Comment[]>(initialComments);
-  const [userSession, setUserSession] = useState<{ address: string; role: string; karma: number } | null>(null);
+  const [userSession, setUserSession] = useState<{ address: string; role: string; karma: number; isAdmin?: boolean } | null>(null);
   const [newComment, setNewComment] = useState('');
   const [replyingToId, setReplyingToId] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -19,13 +19,19 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
 
   const currentSabha = sabhas.find(s => s.slug === post.sabha_slug);
   const isAdminPost = post.author_address.toLowerCase() === '0xd22913b647d905d931e4dbbc36b2eecabb78329b';
+  const isAdminViewer = userSession?.role === 'ADMIN' || userSession?.isAdmin || userSession?.address?.toLowerCase() === '0xd22913b647d905d931e4dbbc36b2eecabb78329b';
 
   useEffect(() => {
     fetch('/api/auth/session')
       .then(res => res.json())
       .then(data => {
         if (data.authenticated && data.user) {
-          setUserSession(data.user);
+          setUserSession({
+            address: data.user.wallet_address,
+            role: data.user.role,
+            karma: data.user.karma_score,
+            isAdmin: data.isAdmin
+          });
         }
       })
       .catch(() => {});
@@ -102,7 +108,7 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
       const createdComment: Comment = {
         ...data.comment,
         author_name: userSession.address.slice(0, 6) + '...' + userSession.address.slice(-4),
-        author_role: userSession.role,
+        author_role: userSession.role as any,
         replies: []
       };
 
@@ -145,6 +151,94 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
     }
   };
 
+  // --- ADMIN MODERATION ACTIONS ---
+  const handleAdminStrike = async (authorAddress: string, targetType: 'POST' | 'COMMENT', targetId: string) => {
+    const reason = prompt(`Reason for issuing a civilizational warning strike to ${authorAddress.slice(0, 8)}...\n(Warning Rule: 8 accumulated strikes result in an automatic permanent ban):`);
+    if (!reason || !reason.trim()) return;
+
+    try {
+      const res = await fetch('/api/admin/moderation/warn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userAddress: authorAddress,
+          reason: reason.trim(),
+          targetType,
+          targetId
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to issue warning');
+      alert(data.message || `Strike recorded. Target now has ${data.warnings_count}/8 strikes.`);
+      window.location.reload();
+    } catch (err: any) {
+      alert(err.message || 'Strike could not be recorded.');
+    }
+  };
+
+  const handleAdminDeletePost = async () => {
+    if (!confirm('Permanently delete this dispatch from SITAVANI?')) return;
+    const reason = prompt('Reason for deletion:', 'Violates civilizational truth standards');
+
+    try {
+      const res = await fetch('/api/admin/moderation/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'POST', id: post.id, reason: reason || 'Purged by Administrator' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete post');
+      alert('Post deleted. Returning to homepage.');
+      window.location.href = '/';
+    } catch (err: any) {
+      alert(err.message || 'Could not delete post.');
+    }
+  };
+
+  const handleAdminDeleteComment = async (commentId: string) => {
+    if (!confirm('Permanently delete this comment?')) return;
+    try {
+      const res = await fetch('/api/admin/moderation/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'COMMENT', id: commentId, reason: 'Purged by Administrator' })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to delete comment');
+      const removeCommentFromTree = (list: Comment[]): Comment[] => {
+        return list.filter(c => c.id !== commentId).map(c => {
+          if (c.replies && c.replies.length > 0) {
+            return { ...c, replies: removeCommentFromTree(c.replies) };
+          }
+          return c;
+        });
+      };
+      setComments(prev => removeCommentFromTree(prev));
+      showToast('Comment purged successfully');
+    } catch (err: any) {
+      alert(err.message || 'Could not delete comment.');
+    }
+  };
+
+  const handleAdminFlagMisinfo = async () => {
+    const note = prompt('Enter editorial fact-check clarification / rebuttal note:');
+    if (!note || !note.trim()) return;
+
+    try {
+      const res = await fetch('/api/admin/moderation/misinformation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId: post.id, note: note.trim() })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to flag misinformation');
+      setPost(prev => ({ ...prev, is_misinformation: true, admin_warning_note: note.trim() }));
+      showToast('Post marked with Asatya (Falsehood) notice');
+    } catch (err: any) {
+      alert(err.message || 'Could not flag misinformation.');
+    }
+  };
+
   const renderComment = (c: Comment, depth = 0) => {
     const isCommentAdmin = c.author_address.toLowerCase() === '0xd22913b647d905d931e4dbbc36b2eecabb78329b';
     const isReplying = replyingToId === c.id;
@@ -154,8 +248,7 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
         key={c.id}
         className={`mt-4 pt-3 ${depth > 0 ? 'border-l-2 border-amber-900/40 pl-3 sm:pl-4 ml-1 sm:ml-2' : 'border-t border-slate-800/80'}`}
       >
-        <div className="flex items-center gap-2 text-xs">
-          {/* Author address & role */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="font-mono text-slate-300 font-semibold">
             {c.author_name || (c.author_address.slice(0, 6) + '...' + c.author_address.slice(-4))}
           </span>
@@ -166,7 +259,20 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
             </span>
           ) : (
             <span className="px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-slate-400 font-mono">
-              {c.author_role === 'ACARYA' ? 'आचार्य Ācārya' : c.author_role === 'VIDVAN' ? 'विद्वान् Vidvān' : 'जिज्ञासु Jijñāsu'}
+              {c.author_role === 'ADMIN' || c.author_role === 'ACHARYA' ? 'आचार्य Ācārya' : c.author_role === 'PANDITA' ? 'पण्डित Paṇḍita' : 'जिज्ञासु Jijñāsu'}
+            </span>
+          )}
+
+          {/* Comment Author Strikes */}
+          {c.author_warnings && c.author_warnings > 0 ? (
+            <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono">
+              ⚠️ {c.author_warnings}/8 Strikes
+            </span>
+          ) : null}
+
+          {c.author_is_banned && (
+            <span className="px-1.5 py-0.2 rounded bg-rose-500/20 text-rose-300 border border-rose-500/40 text-[10px] font-mono font-bold">
+              🚫 BANNED
             </span>
           )}
 
@@ -181,8 +287,8 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
           {c.content}
         </p>
 
-        {/* Actions: Accord / Dissent / Reply */}
-        <div className="mt-2 flex items-center gap-4 text-xs text-slate-400 font-mono">
+        {/* Actions */}
+        <div className="mt-2 flex flex-wrap items-center gap-4 text-xs text-slate-400 font-mono">
           <div className="flex items-center gap-1">
             <button
               onClick={() => handleVote('COMMENT', c.id, 1)}
@@ -217,6 +323,25 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
           >
             <span>प्रतिवचनम् (Reply)</span>
           </button>
+
+          {/* Admin comment actions */}
+          {isAdminViewer && (
+            <div className="flex items-center gap-2 ml-auto text-[10px]">
+              <button
+                onClick={() => handleAdminStrike(c.author_address, 'COMMENT', c.id)}
+                className="text-amber-400/80 hover:text-amber-300"
+                title="Issue 1 Strike (Automatic ban upon 8 strikes)"
+              >
+                ⚠️ Strike Author
+              </button>
+              <button
+                onClick={() => handleAdminDeleteComment(c.id)}
+                className="text-rose-400/80 hover:text-rose-300"
+              >
+                🗑️ Delete
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Reply input box */}
@@ -259,7 +384,6 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
 
   return (
     <div className="space-y-6">
-      {/* Toast */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#0E121B] border border-amber-500/50 text-amber-200 px-4 py-3 rounded-lg shadow-xl shadow-black/80 text-xs sm:text-sm animate-fade-in flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
@@ -290,6 +414,12 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
                 </span>
               </div>
 
+              {post.author_warnings && post.author_warnings > 0 ? (
+                <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-mono">
+                  ⚠️ {post.author_warnings}/8 Strikes
+                </span>
+              ) : null}
+
               {isAdminPost && (
                 <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[11px] font-mono font-semibold flex items-center gap-1">
                   <span>★</span>
@@ -309,12 +439,25 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
             </span>
           </div>
 
+          {/* Misinformation Notice Banner */}
+          {post.is_misinformation && (
+            <div className="p-3.5 rounded-xl bg-rose-950/40 border border-rose-600/70 text-rose-200 text-xs font-mono space-y-1">
+              <div className="font-bold flex items-center gap-1.5 text-rose-400">
+                <span>⚠️</span>
+                <span>मिथ्या / असत्य सूचना (Falsehood / Misinformation Notice)</span>
+              </div>
+              <p className="text-slate-300 leading-relaxed">
+                {post.admin_warning_note || 'This dispatch contains unverified assertions or rejected narratives.'}
+              </p>
+            </div>
+          )}
+
           {/* Post Title */}
           <h1 className="text-xl sm:text-2xl font-bold font-serif text-slate-100 tracking-wide leading-snug">
             {post.title}
           </h1>
 
-          {/* Original Source Reference if applicable */}
+          {/* Source URL if present */}
           {post.original_url && (
             <div className="text-xs font-mono text-slate-400 bg-[#07090E] p-2.5 rounded-lg border border-slate-800/80 flex items-center justify-between">
               <span className="truncate mr-2">स्रोतसूत्रम् Source: {post.original_url}</span>
@@ -329,7 +472,7 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
             </div>
           )}
 
-          {/* Post Image Media */}
+          {/* Post Image */}
           {post.media_url && (
             <div className="rounded-lg overflow-hidden border border-slate-800 bg-[#07080B] max-h-[500px] flex items-center justify-center">
               <img
@@ -347,7 +490,6 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
 
           {/* Post Footer Actions */}
           <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-t border-slate-800/80">
-            {/* Accord / Dissent (Voting) */}
             <div className="flex items-center bg-[#07090E] border border-slate-800 rounded-lg p-1 font-mono text-xs">
               <button
                 onClick={() => handleVote('POST', post.id, 1)}
@@ -374,7 +516,6 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
               </button>
             </div>
 
-            {/* Comment count & Share */}
             <div className="flex items-center gap-3 text-xs font-mono">
               <span className="text-slate-400">
                 💬 {post.comments_count} विचाराः (Comments)
@@ -389,6 +530,34 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
               </button>
             </div>
           </div>
+
+          {/* Admin Moderation Toolbar on Post */}
+          {isAdminViewer && (
+            <div className="pt-3 border-t border-amber-900/40 flex flex-wrap items-center justify-end gap-2 text-[11px] font-mono">
+              <span className="text-amber-400 mr-auto font-semibold">
+                ⚖️ Daṇḍanīti (8-Strike Rule):
+              </span>
+              <button
+                onClick={() => handleAdminStrike(post.author_address, 'POST', post.id)}
+                className="px-2.5 py-1 rounded bg-amber-950/60 hover:bg-amber-900 border border-amber-700 text-amber-300 transition-colors"
+                title="Issue 1 Strike (Automatic ban upon 8 strikes)"
+              >
+                ⚠️ Issue Strike to Author ({post.author_warnings || 0}/8)
+              </button>
+              <button
+                onClick={handleAdminFlagMisinfo}
+                className="px-2.5 py-1 rounded bg-rose-950/60 hover:bg-rose-900 border border-rose-700 text-rose-300 transition-colors"
+              >
+                🚩 Flag Asatya (Falsehood)
+              </button>
+              <button
+                onClick={handleAdminDeletePost}
+                className="px-2.5 py-1 rounded bg-red-950/80 hover:bg-red-900 border border-red-700 text-red-200 transition-colors"
+              >
+                🗑️ Delete Post
+              </button>
+            </div>
+          )}
         </div>
       </article>
 

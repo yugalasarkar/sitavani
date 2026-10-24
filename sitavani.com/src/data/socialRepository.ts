@@ -1,5 +1,5 @@
 import { getDatabasePool } from './database';
-import type { Post, Comment, Sabha, User } from '../types';
+import type { Post, Comment, Sabha, User, UserWarning, ModerationLog } from '../types';
 import { randomBytes, createHash } from 'node:crypto';
 
 export class SocialRepository {
@@ -21,7 +21,7 @@ export class SocialRepository {
     viewerAddress?: string;
   }): Promise<{ posts: Post[]; total: number }> {
     const { sabha, sort = 'hot', search, limit = 25, offset = 0, viewerAddress } = options;
-    const conditions: string[] = [];
+    const conditions: string[] = ['p.is_deleted = FALSE'];
     const values: any[] = [];
     let pIdx = 1;
 
@@ -62,7 +62,9 @@ export class SocialRepository {
         p.id, p.sabha_slug, p.author_address, p.title, p.content, p.media_url, 
         p.media_type, p.original_url, p.is_pinned, p.is_official_dispatch, 
         p.upvotes, p.downvotes, p.score, p.comments_count, p.chain_tx_hash, p.created_at,
+        p.is_deleted, p.deleted_reason, p.is_misinformation, p.admin_warning_note,
         u.display_name as author_name, u.role as author_role, u.is_verified_authority as author_is_verified,
+        u.warnings_count as author_warnings, u.is_banned as author_is_banned,
         ${voteSelect}
       FROM posts p
       JOIN users u ON u.wallet_address = p.author_address
@@ -81,6 +83,8 @@ export class SocialRepository {
       author_name: r.author_name || r.author_address.slice(0, 8),
       author_role: r.author_role,
       author_is_verified: r.author_is_verified,
+      author_warnings: r.author_warnings || 0,
+      author_is_banned: r.author_is_banned || false,
       title: r.title,
       content: r.content,
       media_url: r.media_url,
@@ -93,6 +97,10 @@ export class SocialRepository {
       score: r.score,
       comments_count: r.comments_count,
       chain_tx_hash: r.chain_tx_hash,
+      is_deleted: r.is_deleted,
+      deleted_reason: r.deleted_reason,
+      is_misinformation: r.is_misinformation,
+      admin_warning_note: r.admin_warning_note,
       user_vote: r.user_vote ?? undefined,
       created_at: r.created_at
     }));
@@ -116,7 +124,9 @@ export class SocialRepository {
         p.id, p.sabha_slug, p.author_address, p.title, p.content, p.media_url, 
         p.media_type, p.original_url, p.is_pinned, p.is_official_dispatch, 
         p.upvotes, p.downvotes, p.score, p.comments_count, p.chain_tx_hash, p.created_at,
+        p.is_deleted, p.deleted_reason, p.is_misinformation, p.admin_warning_note,
         u.display_name as author_name, u.role as author_role, u.is_verified_authority as author_is_verified,
+        u.warnings_count as author_warnings, u.is_banned as author_is_banned,
         ${voteSelect}
       FROM posts p
       JOIN users u ON u.wallet_address = p.author_address
@@ -134,6 +144,8 @@ export class SocialRepository {
       author_name: r.author_name || r.author_address.slice(0, 8),
       author_role: r.author_role,
       author_is_verified: r.author_is_verified,
+      author_warnings: r.author_warnings || 0,
+      author_is_banned: r.author_is_banned || false,
       title: r.title,
       content: r.content,
       media_url: r.media_url,
@@ -146,6 +158,10 @@ export class SocialRepository {
       score: r.score,
       comments_count: r.comments_count,
       chain_tx_hash: r.chain_tx_hash,
+      is_deleted: r.is_deleted,
+      deleted_reason: r.deleted_reason,
+      is_misinformation: r.is_misinformation,
+      admin_warning_note: r.admin_warning_note,
       user_vote: r.user_vote ?? undefined,
       created_at: r.created_at
     };
@@ -166,8 +182,11 @@ export class SocialRepository {
     const id = 'post_' + randomBytes(8).toString('hex');
     const author = data.author_address.toLowerCase();
 
-    // Ensure author exists
-    await this.ensureUser(author);
+    // Check if user is banned (e.g. via 8-warning rule)
+    const user = await this.ensureUser(author);
+    if (user.is_banned) {
+      throw new Error('This wallet is permanently banned due to accumulating 8 civilizational warnings (अष्ट-चेतावनी-उल्लङ्घनेन निष्कासितः).');
+    }
 
     const query = `
       INSERT INTO posts (
@@ -190,8 +209,7 @@ export class SocialRepository {
       data.chain_tx_hash || null
     ];
 
-    const res = await this.pool.query(query, values);
-    // Award +5 Karma to user
+    await this.pool.query(query, values);
     await this.pool.query('UPDATE users SET karma_score = karma_score + 5 WHERE wallet_address = $1', [author]);
 
     const post = await this.getPost(id, author);
@@ -212,12 +230,14 @@ export class SocialRepository {
     const query = `
       SELECT 
         c.id, c.post_id, c.parent_id, c.author_address, c.content, c.upvotes, c.downvotes, c.score, c.created_at,
+        c.is_deleted, c.deleted_reason,
         u.display_name as author_name, u.role as author_role, u.is_verified_authority as author_is_verified,
+        u.warnings_count as author_warnings, u.is_banned as author_is_banned,
         ${voteSelect}
       FROM comments c
       JOIN users u ON u.wallet_address = c.author_address
       ${voteJoin}
-      WHERE c.post_id = $1
+      WHERE c.post_id = $1 AND c.is_deleted = FALSE
       ORDER BY c.score DESC, c.created_at ASC
     `;
     const res = await this.pool.query(query, values);
@@ -233,10 +253,14 @@ export class SocialRepository {
         author_name: r.author_name || r.author_address.slice(0, 8),
         author_role: r.author_role,
         author_is_verified: r.author_is_verified,
+        author_warnings: r.author_warnings || 0,
+        author_is_banned: r.author_is_banned || false,
         content: r.content,
         upvotes: r.upvotes,
         downvotes: r.downvotes,
         score: r.score,
+        is_deleted: r.is_deleted,
+        deleted_reason: r.deleted_reason,
         user_vote: r.user_vote ?? undefined,
         created_at: r.created_at,
         replies: []
@@ -264,7 +288,11 @@ export class SocialRepository {
     const id = 'cm_' + randomBytes(8).toString('hex');
     const author = data.author_address.toLowerCase();
 
-    await this.ensureUser(author);
+    // Check if user is banned
+    const user = await this.ensureUser(author);
+    if (user.is_banned) {
+      throw new Error('This wallet is permanently banned due to accumulating 8 civilizational warnings (अष्ट-चेतावनी-उल्लङ्घनेन निष्कासितः).');
+    }
 
     const client = await this.pool.connect();
     try {
@@ -298,7 +326,10 @@ export class SocialRepository {
 
   async castVote(userAddress: string, targetType: 'POST' | 'COMMENT', targetId: string, value: 1 | -1): Promise<{ score: number; userVote: number }> {
     const addr = userAddress.toLowerCase();
-    await this.ensureUser(addr);
+    const user = await this.ensureUser(addr);
+    if (user.is_banned) {
+      throw new Error('This wallet is banned from casting Sammati/Asammati accord votes.');
+    }
 
     const voteId = createHash('sha256').update(`${addr}:${targetType}:${targetId}`).digest('hex');
     const client = await this.pool.connect();
@@ -311,19 +342,16 @@ export class SocialRepository {
       let finalVote = value;
 
       if (existingVote.rows.length === 0) {
-        // New vote
         await client.query(
           'INSERT INTO votes (id, user_address, target_type, target_id, vote_value) VALUES ($1, $2, $3, $4, $5)',
           [voteId, addr, targetType, targetId, value]
         );
         deltaScore = value;
       } else if (existingVote.rows[0].vote_value === value) {
-        // Toggle vote off
         await client.query('DELETE FROM votes WHERE id = $1', [voteId]);
         deltaScore = -value;
         finalVote = 0;
       } else {
-        // Reverse vote
         await client.query('UPDATE votes SET vote_value = $1 WHERE id = $2', [value, voteId]);
         deltaScore = 2 * value;
       }
@@ -354,6 +382,144 @@ export class SocialRepository {
     } finally {
       client.release();
     }
+  }
+
+  // --- MODERATION & 8-WARNING SYSTEM (दण्डनीति Daṇḍanīti) ---
+
+  async issueWarning(data: {
+    userAddress: string;
+    adminAddress: string;
+    reason: string;
+    targetType?: 'POST' | 'COMMENT' | 'DIRECT';
+    targetId?: string;
+  }): Promise<{ warnings_count: number; is_banned: boolean; warning_index: number }> {
+    const addr = data.userAddress.toLowerCase();
+    const admin = data.adminAddress.toLowerCase();
+    await this.ensureUser(addr);
+
+    const client = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // 1. Increment warning count
+      const updateRes = await client.query(
+        'UPDATE users SET warnings_count = warnings_count + 1 WHERE wallet_address = $1 RETURNING warnings_count, is_banned',
+        [addr]
+      );
+      const newCount = updateRes.rows[0].warnings_count;
+      let isBanned = updateRes.rows[0].is_banned;
+
+      // 2. Strict 8-Warning Rule: Automatic Permanent Ban on 8th Strike!
+      if (newCount >= 8 && !isBanned) {
+        isBanned = true;
+        const banReason = `Accumulated 8 civilizational warnings (अष्ट-चेतावनी-उल्लङ्घनम्: 8/8 Strikes reached: ${data.reason})`;
+        await client.query(
+          'UPDATE users SET is_banned = TRUE, ban_reason = $1, banned_at = NOW(), banned_by = $2 WHERE wallet_address = $3',
+          [banReason, admin, addr]
+        );
+      }
+
+      // 3. Record in user_warnings table
+      await client.query(
+        `INSERT INTO user_warnings (user_address, warned_by, reason, target_type, target_id, warning_index)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [addr, admin, data.reason, data.targetType || 'POST', data.targetId || null, newCount]
+      );
+
+      // 4. Log in moderation_logs
+      await client.query(
+        `INSERT INTO moderation_logs (admin_address, action_type, target_id, target_address, reason)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [admin, isBanned && newCount >= 8 ? 'AUTO_BAN_8_STRIKES' : 'ISSUE_WARNING', data.targetId || null, addr, `Strike ${newCount}/8: ${data.reason}`]
+      );
+
+      await client.query('COMMIT');
+      return { warnings_count: newCount, is_banned: isBanned, warning_index: newCount };
+    } catch (e) {
+      await client.query('ROLLBACK');
+      throw e;
+    } finally {
+      client.release();
+    }
+  }
+
+  async deletePost(postId: string, adminAddress: string, reason: string): Promise<void> {
+    const admin = adminAddress.toLowerCase();
+    const res = await this.pool.query(
+      'UPDATE posts SET is_deleted = TRUE, deleted_by = $1, deleted_reason = $2 WHERE id = $3 RETURNING author_address, title',
+      [admin, reason, postId]
+    );
+    if (res.rows[0]) {
+      await this.pool.query(
+        'INSERT INTO moderation_logs (admin_address, action_type, target_id, target_address, reason) VALUES ($1, $2, $3, $4, $5)',
+        [admin, 'DELETE_POST', postId, res.rows[0].author_address, reason]
+      );
+    }
+  }
+
+  async deleteComment(commentId: string, adminAddress: string, reason: string): Promise<void> {
+    const admin = adminAddress.toLowerCase();
+    const res = await this.pool.query(
+      'UPDATE comments SET is_deleted = TRUE, deleted_reason = $1 WHERE id = $2 RETURNING author_address, post_id',
+      [reason, commentId]
+    );
+    if (res.rows[0]) {
+      await this.pool.query(
+        'INSERT INTO moderation_logs (admin_address, action_type, target_id, target_address, reason) VALUES ($1, $2, $3, $4, $5)',
+        [admin, 'DELETE_COMMENT', commentId, res.rows[0].author_address, reason]
+      );
+    }
+  }
+
+  async markMisinformation(postId: string, adminAddress: string, note: string): Promise<void> {
+    const admin = adminAddress.toLowerCase();
+    const res = await this.pool.query(
+      'UPDATE posts SET is_misinformation = TRUE, admin_warning_note = $1 WHERE id = $2 RETURNING author_address',
+      [note, postId]
+    );
+    if (res.rows[0]) {
+      await this.pool.query(
+        'INSERT INTO moderation_logs (admin_address, action_type, target_id, target_address, reason) VALUES ($1, $2, $3, $4, $5)',
+        [admin, 'MARK_MISINFORMATION', postId, res.rows[0].author_address, note]
+      );
+    }
+  }
+
+  async unbanUser(userAddress: string, adminAddress: string, resetWarnings: boolean = false): Promise<void> {
+    const addr = userAddress.toLowerCase();
+    const admin = adminAddress.toLowerCase();
+    const resetSql = resetWarnings ? ', warnings_count = 0' : '';
+    await this.pool.query(
+      `UPDATE users SET is_banned = FALSE, ban_reason = NULL, banned_at = NULL, banned_by = NULL ${resetSql} WHERE wallet_address = $1`,
+      [addr]
+    );
+    await this.pool.query(
+      'INSERT INTO moderation_logs (admin_address, action_type, target_id, target_address, reason) VALUES ($1, $2, $3, $4, $5)',
+      [admin, 'UNBAN_USER', addr, addr, resetWarnings ? 'Pardoned & strikes reset to 0' : 'Unbanned']
+    );
+  }
+
+  async listWarnedAndBannedUsers(): Promise<User[]> {
+    const res = await this.pool.query<User>(
+      'SELECT * FROM users WHERE warnings_count > 0 OR is_banned = TRUE ORDER BY is_banned DESC, warnings_count DESC, created_at DESC'
+    );
+    return res.rows;
+  }
+
+  async getUserWarnings(userAddress: string): Promise<UserWarning[]> {
+    const res = await this.pool.query<UserWarning>(
+      'SELECT * FROM user_warnings WHERE user_address = $1 ORDER BY created_at DESC',
+      [userAddress.toLowerCase()]
+    );
+    return res.rows;
+  }
+
+  async listModerationLogs(limit = 50): Promise<ModerationLog[]> {
+    const res = await this.pool.query<ModerationLog>(
+      'SELECT * FROM moderation_logs ORDER BY created_at DESC LIMIT $1',
+      [limit]
+    );
+    return res.rows;
   }
 
   async ensureUser(walletAddress: string): Promise<User> {
