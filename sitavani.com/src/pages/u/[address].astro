@@ -1,0 +1,65 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import Header from '../../components/Header.astro';
+import Footer from '../../components/Footer.astro';
+import { UserProfileView } from '../../components/UserProfileView';
+import { socialRepository } from '../../data/socialRepository';
+import { parseUserSession } from '../../lib/walletAuth';
+import type { DisplayLanguage } from '../../types';
+
+export const prerender = false;
+
+const { address } = Astro.params;
+if (!address) {
+  return Astro.redirect('/');
+}
+
+// Ensure user exists if valid address
+await socialRepository.ensureUser(address);
+
+const [profileData, { posts }] = await Promise.all([
+  socialRepository.getUserProfile(address),
+  socialRepository.listPosts({ authorAddress: address, limit: 50 })
+]);
+
+if (!profileData) {
+  Astro.response.status = 404;
+}
+
+const viewer = parseUserSession(Astro.request);
+const requestedLanguage = Astro.url.searchParams.get('lang');
+const language: DisplayLanguage = requestedLanguage === 'hi' || requestedLanguage === 'en' ? requestedLanguage : 'dual';
+---
+
+<Layout
+  title={profileData ? `${profileData.user.display_name} (@${profileData.user.username}) | SITAVANI` : 'User Not Found | SITAVANI'}
+  description={profileData?.user.bio || 'Sovereign Sanatana Community Profile on SITAVANI'}
+>
+  <div class="min-h-screen flex flex-col bg-[#07090E] text-slate-100 font-sans">
+    <Header currentPath="/" language={language} />
+
+    <main class="flex-grow container mx-auto px-4 py-8 max-w-5xl">
+      {!profileData ? (
+        <section class="rounded-xl border border-amber-900/40 bg-[#0B0D13] p-10 text-center space-y-4">
+          <p class="font-mono text-xs uppercase tracking-widest text-amber-500">४०४ · सदस्यः न लब्धः</p>
+          <h1 class="text-2xl font-bold font-serif text-slate-100">User Profile Not Found</h1>
+          <p class="text-xs text-slate-400">The requested wallet has not yet participated in the assembly.</p>
+          <div class="pt-2">
+            <a href="/" class="px-4 py-2 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs uppercase hover:bg-amber-400 inline-block">
+              ← Return to Samvāda
+            </a>
+          </div>
+        </section>
+      ) : (
+        <UserProfileView
+          client:load
+          profileData={profileData}
+          initialPosts={posts}
+          viewerAddress={viewer?.address}
+        />
+      )}
+    </main>
+
+    <Footer language={language} />
+  </div>
+</Layout>

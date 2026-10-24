@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import type { Post, Sabha } from '../types';
+import { NilaTipModal } from './NilaTipModal';
 
 interface SocialFeedProps {
   initialPosts: Post[];
@@ -30,6 +31,7 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
   const [isPinned, setIsPinned] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+  const [tippingPost, setTippingPost] = useState<Post | null>(null);
 
   useEffect(() => {
     fetchSession();
@@ -480,16 +482,20 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
                     <span className="text-amber-700">·</span>
 
                     {/* Author & Badge */}
-                    <span className="text-slate-300">
+                    <a
+                      href={`/u/${post.author_address}`}
+                      className="text-slate-300 hover:text-amber-300 transition-colors"
+                      title="View Sovereign Profile"
+                    >
                       {post.is_official_dispatch ? (
                         <span className="inline-flex items-center gap-1 text-amber-300 font-semibold">
                           <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
                           सीतावाणी मुख्य सम्पादक (SITAVANI Head Editor)
                         </span>
                       ) : (
-                        <span>{authorShort}</span>
+                        <span className="hover:underline">{authorShort}</span>
                       )}
-                    </span>
+                    </a>
 
                     {/* Author Warnings Bar */}
                     {post.author_warnings && post.author_warnings > 0 ? (
@@ -559,12 +565,22 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
 
                   {/* Post Footer */}
                   <div className="pt-2 border-t border-slate-800/50 flex items-center justify-between text-xs font-mono text-slate-400">
-                    <a
-                      href={`/p/${post.id}`}
-                      className="flex items-center gap-1.5 hover:text-amber-300 transition-colors py-1"
-                    >
-                      <span>💬 {post.comments_count} टिप्पण्यः Comments</span>
-                    </a>
+                    <div className="flex items-center gap-3">
+                      <a
+                        href={`/p/${post.id}`}
+                        className="flex items-center gap-1.5 hover:text-amber-300 transition-colors py-1"
+                      >
+                        <span>💬 {post.comments_count} टिप्पण्यः Comments</span>
+                      </a>
+
+                      <button
+                        onClick={() => setTippingPost(post)}
+                        className="flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-700/50 transition-colors text-xs font-semibold"
+                        title="Gift NILA (नीला) native coins on Kasturi Chain"
+                      >
+                        <span>🎁 दक्षिणा Nīlā</span>
+                      </button>
+                    </div>
 
                     <div className="flex items-center gap-3">
                       {post.original_url && (
@@ -619,6 +635,21 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
           })
         )}
       </div>
+
+      {/* Nīlā (नीला) Tipping Modal */}
+      {tippingPost && (
+        <NilaTipModal
+          recipientAddress={tippingPost.author_address}
+          recipientName={tippingPost.author_name}
+          targetType="POST"
+          targetId={tippingPost.id}
+          onClose={() => setTippingPost(null)}
+          onSuccess={(amount, txHash) => {
+            alert(`Dakṣiṇā of ${amount} Nīlā transferred successfully on Kasturi Chain! Tx: ${txHash.slice(0, 10)}...`);
+            setTippingPost(null);
+          }}
+        />
+      )}
     </div>
   );
 };

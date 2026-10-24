@@ -123,6 +123,7 @@ export interface User {
   username: string;
   display_name: string;
   avatar_url?: string | null;
+  banner_url?: string | null;
   bio?: string | null;
   role: UserRole;
   karma_score: number;
@@ -132,6 +133,7 @@ export interface User {
   ban_reason?: string | null;
   banned_at?: string | null;
   banned_by?: string | null;
+  total_nila_received?: number;
   created_at: string;
 }
 
@@ -172,6 +174,8 @@ export interface Post {
   deleted_reason?: string | null;
   is_misinformation?: boolean;
   admin_warning_note?: string | null;
+  tips_total?: number;
+  tips_count?: number;
   user_vote?: number;
   created_at: string;
 }
@@ -216,4 +220,44 @@ export interface ModerationLog {
   target_address?: string | null;
   reason?: string | null;
   created_at: string;
+}
+
+export interface AppNotification {
+  id: number;
+  recipient_address: string;
+  sender_address?: string | null;
+  type: 'REPLY_POST' | 'REPLY_COMMENT' | 'ACCORD_MILESTONE' | 'OFFICIAL_DISPATCH' | 'WARNING_STRIKE' | 'NILA_TIP';
+  title: string;
+  body?: string | null;
+  link?: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface NilaTip {
+  id: number;
+  sender_address: string;
+  recipient_address: string;
+  target_type: 'POST' | 'COMMENT';
+  target_id: string;
+  amount_nila: number;
+  chain_tx_hash: string;
+  created_at: string;
+}
+
+export interface SabhaReputation {
+  sabha_slug: string;
+  name_sa: string;
+  name_en: string;
+  icon: string;
+  posts_count: number;
+  score_sum: number;
+}
+
+export interface UserProfileData {
+  user: User;
+  posts_count: number;
+  comments_count: number;
+  sabha_reputation: SabhaReputation[];
+  tips_received_total: number;
 }

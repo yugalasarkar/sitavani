@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import type { AppNotification } from '../types';
 
 interface SessionData {
   authenticated: boolean;
@@ -21,9 +22,22 @@ export const WalletNav: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Notifications state
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [showNotifs, setShowNotifs] = useState(false);
+
   useEffect(() => {
     fetchSession();
   }, []);
+
+  useEffect(() => {
+    if (session.authenticated && session.address) {
+      fetchNotifications();
+      const interval = setInterval(fetchNotifications, 30000); // 30s poll
+      return () => clearInterval(interval);
+    }
+  }, [session.authenticated, session.address]);
 
   const fetchSession = async () => {
     try {
@@ -32,6 +46,29 @@ export const WalletNav: React.FC = () => {
         const data = await res.json();
         setSession(data);
       }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await fetch('/api/social/notifications');
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.notifications || []);
+        setUnreadCount(data.unreadCount || 0);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await fetch('/api/social/notifications', { method: 'POST' });
+      setUnreadCount(0);
+      setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
     } catch (e) {
       console.error(e);
     }
@@ -117,6 +154,66 @@ export const WalletNav: React.FC = () => {
           </span>
         ) : null}
 
+        {/* Notifications Bell with Dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => {
+              setShowNotifs(!showNotifs);
+              if (!showNotifs && unreadCount > 0) handleMarkAllRead();
+            }}
+            className="p-1.5 rounded-md bg-[#0D1017] border border-amber-950/60 text-slate-300 hover:text-amber-300 transition-colors relative flex items-center justify-center text-xs"
+            title="सूचना-केन्द्रम् Notifications"
+          >
+            <span>🔔</span>
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[15px] h-[15px] rounded-full bg-rose-500 text-white text-[9px] font-mono font-bold flex items-center justify-center px-0.5 animate-pulse">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {/* Notifications Dropdown Popup */}
+          {showNotifs && (
+            <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-[#0B0E17] border border-amber-900/60 rounded-xl shadow-2xl p-3 z-50 space-y-2 text-xs">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className="font-serif font-bold text-slate-200">सूचना-केन्द्रम् Notifications</span>
+                {notifications.length > 0 && (
+                  <button
+                    onClick={handleMarkAllRead}
+                    className="text-[10px] font-mono text-amber-400 hover:underline"
+                  >
+                    Mark read
+                  </button>
+                )}
+              </div>
+
+              <div className="max-h-64 overflow-y-auto space-y-1.5 divide-y divide-slate-800/60">
+                {notifications.length === 0 ? (
+                  <div className="py-6 text-center text-slate-500 text-[11px] font-mono">
+                    न कापि सूचना। No notifications yet.
+                  </div>
+                ) : (
+                  notifications.map(n => (
+                    <a
+                      key={n.id}
+                      href={n.link || '#'}
+                      onClick={() => setShowNotifs(false)}
+                      className={`block pt-1.5 pb-1 px-1 rounded transition-colors ${n.is_read ? 'text-slate-400 hover:bg-slate-900' : 'bg-amber-500/10 text-slate-200 font-semibold'}`}
+                    >
+                      <div className="flex items-center justify-between text-[10px] font-mono text-amber-400">
+                        <span>{n.type}</span>
+                        <span className="text-slate-500">{new Date(n.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                      <p className="text-xs text-slate-200 line-clamp-1">{n.title}</p>
+                      {n.body && <p className="text-[11px] text-slate-400 line-clamp-1">{n.body}</p>}
+                    </a>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
         {isAcharya && (
           <a
             href="/admin"
@@ -124,15 +221,23 @@ export const WalletNav: React.FC = () => {
             title="Ācārya Editorial & Moderation Desk"
           >
             <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span>
-            <span>सम्पादक Ācārya Desk</span>
+            <span>सम्पादक Desk</span>
           </a>
         )}
 
+        {/* User Chip: links directly to /u/[address] */}
         <div className="flex items-center gap-2 px-2.5 py-1.5 bg-[#0D1017] border border-amber-950/60 rounded-md text-xs">
-          <span className="font-mono text-amber-300 font-semibold">{shortAddr}</span>
+          <a
+            href={`/u/${session.address}`}
+            className="font-mono text-amber-300 font-semibold hover:text-amber-200 hover:underline flex items-center gap-1"
+            title="Open Sovereign Profile"
+          >
+            <span>👤</span>
+            <span>{session.user?.display_name || shortAddr}</span>
+          </a>
           <span className="text-amber-700">·</span>
           <span className="text-amber-400/90 font-mono font-medium" title="Dharmic Merit Score">
-            पुण्य Puṇya: <span className="text-amber-200">{karma}</span>
+            पुण्य: <span className="text-amber-200">{karma}</span>
           </span>
           <button
             onClick={disconnectWallet}

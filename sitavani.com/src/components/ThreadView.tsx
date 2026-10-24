@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Post, Comment, Sabha } from '../types';
+import { NilaTipModal } from './NilaTipModal';
+import { ShlokaView } from './ShlokaView';
 
 interface ThreadViewProps {
   post: Post;
@@ -16,6 +18,59 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
   const [replyText, setReplyText] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [tippingTarget, setTippingTarget] = useState<{ address: string; name?: string; type: 'POST' | 'COMMENT'; id: string } | null>(null);
+
+  const renderFormattedContent = (text: string) => {
+    if (!text || !text.includes(':::shloka')) {
+      return <div className="whitespace-pre-wrap">{text}</div>;
+    }
+
+    const parts = text.split(/(:::shloka[\s\S]*?:::)/g);
+    return (
+      <div className="space-y-4">
+        {parts.map((part, index) => {
+          if (part.startsWith(':::shloka') && part.endsWith(':::')) {
+            const inner = part.replace(/^:::shloka\s*/, '').replace(/\s*:::$/, '');
+            const sections = inner.split(/\n\s*---\s*\n/);
+            const verse = sections[0]?.trim() || '';
+            let translit = '';
+            let en = '';
+            let hi = '';
+            let source = '';
+
+            if (sections.length >= 5) {
+              translit = sections[1]?.trim() || '';
+              en = sections[2]?.trim() || '';
+              hi = sections[3]?.trim() || '';
+              source = sections[4]?.trim() || '';
+            } else if (sections.length === 4) {
+              translit = sections[1]?.trim() || '';
+              en = sections[2]?.trim() || '';
+              hi = sections[3]?.trim() || '';
+            } else if (sections.length === 3) {
+              en = sections[1]?.trim() || '';
+              hi = sections[2]?.trim() || '';
+            } else if (sections.length === 2) {
+              en = sections[1]?.trim() || '';
+            }
+
+            return (
+              <ShlokaView
+                key={index}
+                verseSanskrit={verse}
+                transliterationIast={translit || undefined}
+                translationEn={en}
+                translationHi={hi}
+                sourceCitation={source || undefined}
+              />
+            );
+          }
+          if (!part.trim()) return null;
+          return <p key={index} className="whitespace-pre-wrap">{part.trim()}</p>;
+        })}
+      </div>
+    );
+  };
 
   const currentSabha = sabhas.find(s => s.slug === post.sabha_slug);
   const isAdminPost = post.author_address.toLowerCase() === '0xd22913b647d905d931e4dbbc36b2eecabb78329b';
@@ -249,9 +304,13 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
         className={`mt-4 pt-3 ${depth > 0 ? 'border-l-2 border-amber-900/40 pl-3 sm:pl-4 ml-1 sm:ml-2' : 'border-t border-slate-800/80'}`}
       >
         <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-mono text-slate-300 font-semibold">
+          <a
+            href={`/u/${c.author_address}`}
+            className="font-mono text-slate-300 font-semibold hover:text-amber-300 hover:underline transition-colors"
+            title="View Profile"
+          >
             {c.author_name || (c.author_address.slice(0, 6) + '...' + c.author_address.slice(-4))}
-          </span>
+          </a>
 
           {isCommentAdmin ? (
             <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono">
@@ -322,6 +381,19 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
             className="hover:text-amber-300 flex items-center gap-1 transition-colors"
           >
             <span>प्रतिवचनम् (Reply)</span>
+          </button>
+
+          <button
+            onClick={() => setTippingTarget({
+              address: c.author_address,
+              name: c.author_name || (c.author_address.slice(0, 6) + '...' + c.author_address.slice(-4)),
+              type: 'COMMENT',
+              id: c.id
+            })}
+            className="hover:text-emerald-300 flex items-center gap-1 text-[11px] text-emerald-400/80 transition-colors"
+            title="Gift Nīlā coins to commentator"
+          >
+            <span>🎁 दक्षिणा Nīlā</span>
           </button>
 
           {/* Admin comment actions */}
@@ -409,9 +481,13 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
 
               <div className="flex items-center gap-1.5 font-mono">
                 <span className="text-slate-400">लेखकः</span>
-                <span className="text-slate-200 font-semibold">
+                <a
+                  href={`/u/${post.author_address}`}
+                  className="text-slate-200 hover:text-amber-300 hover:underline font-semibold transition-colors"
+                  title="View Sovereign Profile"
+                >
                   {post.author_name || (post.author_address.slice(0, 6) + '...' + post.author_address.slice(-4))}
-                </span>
+                </a>
               </div>
 
               {post.author_warnings && post.author_warnings > 0 ? (
@@ -484,8 +560,8 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
           )}
 
           {/* Post Body Content */}
-          <div className="text-sm sm:text-base text-slate-200 leading-relaxed space-y-3 font-sans whitespace-pre-wrap">
-            {post.content}
+          <div className="text-sm sm:text-base text-slate-200 leading-relaxed font-sans">
+            {renderFormattedContent(post.content)}
           </div>
 
           {/* Post Footer Actions */}
@@ -517,6 +593,19 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
             </div>
 
             <div className="flex items-center gap-3 text-xs font-mono">
+              <button
+                onClick={() => setTippingTarget({
+                  address: post.author_address,
+                  name: post.author_name || (post.author_address.slice(0, 6) + '...' + post.author_address.slice(-4)),
+                  type: 'POST',
+                  id: post.id
+                })}
+                className="px-3 py-1 rounded bg-emerald-950/40 border border-emerald-700/60 text-emerald-300 hover:bg-emerald-900/60 transition-colors flex items-center gap-1.5 font-semibold"
+                title="Gift NILA (नीला) native coins on Kasturi Chain"
+              >
+                <span>🎁 दक्षिणा Gift Nīlā</span>
+              </button>
+
               <span className="text-slate-400">
                 💬 {post.comments_count} विचाराः (Comments)
               </span>
@@ -609,6 +698,21 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
           )}
         </div>
       </section>
+
+      {/* Nīlā (नीला) Tipping Modal */}
+      {tippingTarget && (
+        <NilaTipModal
+          recipientAddress={tippingTarget.address}
+          recipientName={tippingTarget.name}
+          targetType={tippingTarget.type}
+          targetId={tippingTarget.id}
+          onClose={() => setTippingTarget(null)}
+          onSuccess={(amount, txHash) => {
+            showToast(`Dakṣiṇā of ${amount} Nīlā successfully gifted! Tx: ${txHash.slice(0, 10)}...`);
+            setTippingTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 };
