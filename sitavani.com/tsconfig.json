@@ -4,7 +4,7 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "module": "ESNext",
-    "types": ["vite/client", "astro/client"],
+    "types": ["node", "astro/client"],
     "lib": [
       "ES2022",
       "DOM",

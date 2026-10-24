@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Article, DisplayLanguage, NewsCategory } from '../types';
 import { CATEGORY_LABELS } from '../utils/lang';
 
@@ -7,6 +7,8 @@ interface DispatchWireProps {
   language: DisplayLanguage;
   selectedCategory: NewsCategory | 'ALL';
   onCategoryChange: (category: NewsCategory | 'ALL') => void;
+  searchQuery: string;
+  onSearchChange: (query: string) => void;
   onSelect: (article: Article) => void;
 }
 
@@ -15,10 +17,10 @@ export const DispatchWire: React.FC<DispatchWireProps> = ({
   language,
   selectedCategory,
   onCategoryChange,
+  searchQuery,
+  onSearchChange,
   onSelect
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-
   const filteredArticles = articles.filter(item => {
     const matchesCat = selectedCategory === 'ALL' || item.category === selectedCategory;
     const q = searchQuery.toLowerCase().trim();
@@ -43,6 +45,10 @@ export const DispatchWire: React.FC<DispatchWireProps> = ({
     { id: 'SANSKRIT', label_en: 'Sanskrit', label_hi: 'संस्कृत' },
     { id: 'GENERAL', label_en: 'General', label_hi: 'सामान्य' },
   ];
+  categories.push(
+    { id: 'GOVERNANCE', label_en: 'Governance', label_hi: 'शासन' },
+    { id: 'NARRATIVE_FACTS', label_en: 'Fact Shield', label_hi: 'तथ्य-जाँच' }
+  );
 
   return (
     <section className="mb-16">
@@ -55,7 +61,7 @@ export const DispatchWire: React.FC<DispatchWireProps> = ({
           <p className="text-xs font-mono text-slate-400 mt-1">
             {language === 'hi' 
               ? 'मानव-सत्यापित धर्म पुनर्जागरण अभिलेख' 
-              : 'Human-verified editorial stream · Cryptographically audited'}
+              : 'Source-attributed published stream · Editorial approval required'}
           </p>
         </div>
 
@@ -65,7 +71,7 @@ export const DispatchWire: React.FC<DispatchWireProps> = ({
             type="text"
             placeholder={language === 'hi' ? 'खोजें: मंदिर, तेजस, पुरातात्विक...' : 'Filter dispatches, sources, keywords...'}
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => onSearchChange(e.target.value)}
             className="w-full bg-[#0B0D13] border border-slate-800 rounded-lg px-3.5 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/50"
           />
         </div>
@@ -102,8 +108,9 @@ export const DispatchWire: React.FC<DispatchWireProps> = ({
         <div className="divide-y divide-slate-800/60 border-t border-b border-slate-800/80">
           {filteredArticles.map((item) => {
             const categoryLabel = CATEGORY_LABELS[item.category];
-            const formattedDate = item.approved_at
-              ? new Date(item.approved_at).toLocaleTimeString(language === 'hi' ? 'hi-IN' : 'en-US', {
+            const publishedDate = item.published_at || item.approved_at || item.created_at;
+            const formattedDate = publishedDate
+              ? new Date(publishedDate).toLocaleTimeString(language === 'hi' ? 'hi-IN' : 'en-US', {
                   hour: '2-digit',
                   minute: '2-digit'
                 })

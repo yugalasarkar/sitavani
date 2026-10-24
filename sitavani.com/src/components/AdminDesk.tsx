@@ -11,7 +11,13 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   language,
   onRefreshStats
 }) => {
-  const [activeTab, setActiveTab] = useState<'pending' | 'daemon' | 'sources' | 'archive' | 'manifests'>('pending');
+  const [activeTab, setActiveTab] = useState<'pending' | 'daemon' | 'sources' | 'archive'>('pending');
+  const [authenticated, setAuthenticated] = useState(false);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [accessKey, setAccessKey] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [actionFeedback, setActionFeedback] = useState<{ kind: 'success' | 'error'; message: string } | null>(null);
+  const [actingArticleId, setActingArticleId] = useState<string | null>(null);
   
   // Pending queue state
   const [pendingArticles, setPendingArticles] = useState<Article[]>([]);
@@ -19,7 +25,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
 
   // Archive state
   const [archiveArticles, setArchiveArticles] = useState<Article[]>([]);
-  const [archiveStatusFilter, setArchiveStatusFilter] = useState<'ALL' | 'APPROVED' | 'DISCARDED'>('ALL');
+  const [archiveStatusFilter, setArchiveStatusFilter] = useState<'ALL' | 'APPROVED' | 'PUBLISHED' | 'DISCARDED'>('ALL');
   const [loadingArchive, setLoadingArchive] = useState(false);
 
   // Sources state
@@ -32,21 +38,6 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   // Daemon state
   const [daemonLogs, setDaemonLogs] = useState<DaemonLog[]>([]);
   const [runningIngest, setRunningIngest] = useState(false);
-  const [lastIngestResult, setLastIngestResult] = useState<{
-    new_items_ingested: number;
-    duplicates_prevented: number;
-  } | null>(null);
-
-  // Manifests state
-  const [manifests, setManifests] = useState<{
-    python_daemon: string;
-    schema_sql: string;
-    dockerfile: string;
-    requirements_txt: string;
-    crontab: string;
-  } | null>(null);
-  const [selectedManifest, setSelectedManifest] = useState<'python_daemon' | 'schema_sql' | 'dockerfile' | 'crontab'>('python_daemon');
-  const [copiedManifest, setCopiedManifest] = useState(false);
 
   // Edit & Publish Modal state
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
@@ -57,15 +48,40 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   const [editCategory, setEditCategory] = useState<NewsCategory>('HERITAGE');
   const [editNotes, setEditNotes] = useState('');
 
+  const adminRequest = async (url: string, init?: RequestInit) => {
+    const response = await fetch(url, { credentials: 'same-origin', ...init });
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 401) setAuthenticated(false);
+    if (!response.ok) throw new Error(data.error || `Request failed (${response.status}).`);
+    return data;
+  };
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/admin/session', { credentials: 'same-origin' })
+      .then(async response => ({ response, data: await response.json().catch(() => ({})) }))
+      .then(({ response, data }) => {
+        if (!active) return;
+        setAuthenticated(response.ok && data.authenticated === true);
+        if (!response.ok) setAuthError(data.error || 'Admin access is not available.');
+      })
+      .catch(() => {
+        if (active) setAuthError('Could not reach the admin service.');
+      })
+      .finally(() => {
+        if (active) setCheckingSession(false);
+      });
+    return () => { active = false; };
+  }, []);
+
   // Fetch Pending Queue
   const fetchPending = async () => {
     setLoadingPending(true);
     try {
-      const res = await fetch('/api/admin/articles/pending');
-      const data = await res.json();
+      const data = await adminRequest('/api/admin/articles/pending');
       setPendingArticles(data.articles || []);
     } catch (e) {
-      console.error('Failed to fetch pending queue:', e);
+      setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to fetch pending articles.' });
     } finally {
       setLoadingPending(false);
     }
@@ -75,11 +91,10 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   const fetchArchive = async () => {
     setLoadingArchive(true);
     try {
-      const res = await fetch(`/api/admin/articles/all?status=${archiveStatusFilter}`);
-      const data = await res.json();
+      const data = await adminRequest(`/api/admin/articles/all?status=${archiveStatusFilter}`);
       setArchiveArticles(data.articles || []);
     } catch (e) {
-      console.error('Failed to fetch archive:', e);
+      setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to fetch article archive.' });
     } finally {
       setLoadingArchive(false);
     }
@@ -88,66 +103,52 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   // Fetch Sources
   const fetchSources = async () => {
     try {
-      const res = await fetch('/api/admin/sources');
-      const data = await res.json();
+      const data = await adminRequest('/api/admin/sources');
       setSources(data.sources || []);
     } catch (e) {
-      console.error('Failed to fetch sources:', e);
+      setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to fetch sources.' });
     }
   };
 
   // Fetch Daemon Logs
   const fetchLogs = async () => {
     try {
-      const res = await fetch('/api/admin/ingest/logs');
-      const data = await res.json();
+      const data = await adminRequest('/api/admin/ingest/logs');
       setDaemonLogs(data.logs || []);
     } catch (e) {
-      console.error('Failed to fetch logs:', e);
-    }
-  };
-
-  // Fetch System Manifests
-  const fetchManifests = async () => {
-    try {
-      const res = await fetch('/api/system/manifests');
-      const data = await res.json();
-      setManifests(data);
-    } catch (e) {
-      console.error('Failed to fetch manifests:', e);
+      setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to fetch ingestion logs.' });
     }
   };
 
   useEffect(() => {
+    if (!authenticated) return;
     fetchPending();
     fetchSources();
     fetchLogs();
-    fetchManifests();
-  }, []);
+  }, [authenticated]);
 
   useEffect(() => {
-    if (activeTab === 'archive') {
+    if (authenticated && activeTab === 'archive') {
       fetchArchive();
     }
-  }, [activeTab, archiveStatusFilter]);
+  }, [authenticated, activeTab, archiveStatusFilter]);
 
-  // Handle Action: APPROVE or DISCARD with Optimistic Update
   const handleAction = async (id: string, action: 'APPROVE' | 'DISCARD') => {
-    // Optimistic removal from UI
-    setPendingArticles(prev => prev.filter(a => a.id !== id));
-
+    setActingArticleId(id);
+    setActionFeedback(null);
     try {
-      await fetch('/api/admin/articles/action', {
+      await adminRequest('/api/admin/articles/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ article_id: id, action })
       });
+      await fetchPending();
       onRefreshStats?.();
       fetchLogs();
     } catch (err) {
-      console.error('Failed to execute editorial action:', err);
-      // Revert if error
-      fetchPending();
+      setActionFeedback({ kind: 'error', message: err instanceof Error ? err.message : 'Editorial action failed.' });
+    } finally {
+      setActingArticleId(null);
     }
   };
 
@@ -162,17 +163,14 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     setEditNotes(article.editorial_notes || '');
   };
 
-  // Submit Edit & Publish
+  // Submit editorial edits for approval; publishing is a separate action.
   const handleUpdateAndApprove = async () => {
     if (!editingArticle) return;
     const id = editingArticle.id;
-
-    // Optimistic removal
-    setPendingArticles(prev => prev.filter(a => a.id !== id));
-    setEditingArticle(null);
-
+    setActingArticleId(id);
+    setActionFeedback(null);
     try {
-      await fetch('/api/admin/articles/action', {
+      await adminRequest('/api/admin/articles/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -186,11 +184,14 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
           editorial_notes: editNotes
         })
       });
+      setEditingArticle(null);
+      await fetchPending();
       onRefreshStats?.();
       fetchLogs();
     } catch (err) {
-      console.error('Failed to update and approve:', err);
-      fetchPending();
+      setActionFeedback({ kind: 'error', message: err instanceof Error ? err.message : 'Article changes could not be saved.' });
+    } finally {
+      setActingArticleId(null);
     }
   };
 
@@ -198,17 +199,9 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   const handleTriggerIngest = async () => {
     setRunningIngest(true);
     try {
-      const res = await fetch('/api/admin/ingest/run', { method: 'POST' });
-      const data = await res.json();
-      setLastIngestResult({
-        new_items_ingested: data.new_items_ingested,
-        duplicates_prevented: data.duplicates_prevented
-      });
-      await fetchPending();
-      await fetchLogs();
-      onRefreshStats?.();
+      await adminRequest('/api/admin/ingest/run', { method: 'POST' });
     } catch (err) {
-      console.error('Failed to trigger ingest:', err);
+      setActionFeedback({ kind: 'error', message: err instanceof Error ? err.message : 'Ingestion is unavailable.' });
     } finally {
       setRunningIngest(false);
     }
@@ -217,13 +210,12 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   // Toggle Source Active Status
   const handleToggleSource = async (id: number) => {
     try {
-      const res = await fetch(`/api/admin/sources/${id}/toggle`, { method: 'PATCH' });
-      const data = await res.json();
+      const data = await adminRequest(`/api/admin/sources/${id}/toggle`, { method: 'PATCH' });
       if (data.success) {
         setSources(prev => prev.map(s => s.id === id ? data.source : s));
       }
     } catch (err) {
-      console.error('Failed to toggle source:', err);
+      setActionFeedback({ kind: 'error', message: err instanceof Error ? err.message : 'Source update failed.' });
     }
   };
 
@@ -233,17 +225,16 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     if (!newSourceName || !newSourceRss) return;
 
     try {
-      const res = await fetch('/api/admin/sources', {
+      const data = await adminRequest('/api/admin/sources', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newSourceName,
-          base_url: newSourceUrl || 'https://news.nic.in',
+          base_url: newSourceUrl,
           rss_endpoint: newSourceRss,
           is_active: true
         })
       });
-      const data = await res.json();
       if (data.success) {
         setSources(prev => [...prev, data.source]);
         setNewSourceName('');
@@ -252,17 +243,89 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
         setAddingSource(false);
       }
     } catch (err) {
-      console.error('Failed to add source:', err);
+      setActionFeedback({ kind: 'error', message: err instanceof Error ? err.message : 'Source could not be added.' });
     }
   };
 
-  const copyManifestToClipboard = () => {
-    if (!manifests) return;
-    const text = manifests[selectedManifest];
-    navigator.clipboard.writeText(text);
-    setCopiedManifest(true);
-    setTimeout(() => setCopiedManifest(false), 2000);
+  const handleLogin = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setAuthError('');
+    try {
+      const response = await fetch('/api/admin/session', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ accessKey })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Admin sign-in failed.');
+      setAuthenticated(true);
+      setAccessKey('');
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Admin sign-in failed.');
+    }
   };
+
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/admin/session', { method: 'DELETE', credentials: 'same-origin' });
+    } finally {
+      setAuthenticated(false);
+      setPendingArticles([]);
+      setSources([]);
+      setDaemonLogs([]);
+    }
+  };
+
+  const handleArchiveAction = async (articleId: string, action: 'PUBLISH' | 'UNPUBLISH') => {
+    setActingArticleId(articleId);
+    setActionFeedback(null);
+    try {
+      await adminRequest('/api/admin/articles/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ article_id: articleId, action })
+      });
+      await fetchArchive();
+      setActionFeedback({ kind: 'success', message: action === 'PUBLISH' ? 'Article published.' : 'Article unpublished and returned to approved status.' });
+      onRefreshStats?.();
+      fetchLogs();
+    } catch (error) {
+      setActionFeedback({ kind: 'error', message: error instanceof Error ? error.message : 'Editorial action failed.' });
+    } finally {
+      setActingArticleId(null);
+    }
+  };
+
+  if (checkingSession) {
+    return <main className="min-h-screen bg-[#060709] text-amber-300 font-mono grid place-items-center">Checking editorial session…</main>;
+  }
+
+  if (!authenticated) {
+    return (
+      <main className="min-h-screen bg-[#060709] text-slate-100 grid place-items-center px-4">
+        <form onSubmit={handleLogin} className="w-full max-w-md rounded-xl border border-amber-900/50 bg-[#090B10] p-7 shadow-2xl space-y-5">
+          <div>
+            <p className="font-mono text-xs uppercase tracking-widest text-amber-400">Sitavani · Editorial Access</p>
+            <h1 className="mt-2 text-2xl font-serif font-bold">Sign in to the review desk</h1>
+            <p className="mt-2 text-sm text-slate-400">Use the server-configured admin access key. It is exchanged for a short-lived, HttpOnly session cookie.</p>
+          </div>
+          {authError && <p role="alert" className="rounded border border-rose-900/60 bg-rose-950/30 p-3 text-sm text-rose-300">{authError}</p>}
+          <label className="block text-xs font-mono text-slate-300" htmlFor="admin-access-key">Admin access key</label>
+          <input
+            id="admin-access-key"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={accessKey}
+            onChange={event => setAccessKey(event.target.value)}
+            className="w-full rounded border border-slate-700 bg-[#060709] px-3 py-2 text-slate-100 focus:border-amber-500 focus:outline-none"
+          />
+          <button type="submit" className="w-full rounded bg-gradient-to-r from-amber-500 to-orange-600 px-4 py-2.5 text-sm font-bold text-slate-950 hover:brightness-110">Continue</button>
+        </form>
+      </main>
+    );
+  }
 
   return (
     <div className="bg-[#060709] min-h-screen text-slate-100 font-sans pb-24">
@@ -285,11 +348,12 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
           <div className="flex items-center gap-3">
             <button
               onClick={handleTriggerIngest}
-              disabled={runningIngest}
+              disabled
+              title="Live feed ingestion has not been connected; no articles will be fabricated."
               className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-md hover:brightness-110 transition-all disabled:opacity-50"
             >
-              <span className={runningIngest ? 'animate-spin' : ''}>⚙</span>
-              <span>{runningIngest ? 'Crawling Feeds...' : 'Run Ingestion Daemon'}</span>
+              <span>⚙</span>
+              <span>Ingestion not configured</span>
             </button>
 
             <button
@@ -298,8 +362,18 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
             >
               Refresh
             </button>
+            <button onClick={handleLogout} className="px-3 py-2 border border-slate-700 text-slate-300 hover:border-rose-700 hover:text-rose-300 rounded-md text-xs font-mono transition-colors">Sign out</button>
           </div>
         </header>
+
+        <p className="mb-6 rounded border border-amber-900/40 bg-amber-950/10 px-4 py-3 text-xs font-mono text-amber-200/80">
+          Storage is currently process-local memory. Articles and source settings are not persistent and reset when the server restarts.
+        </p>
+        {actionFeedback && (
+          <p role={actionFeedback.kind === 'error' ? 'alert' : 'status'} className={`mb-6 rounded border px-4 py-3 text-sm ${actionFeedback.kind === 'error' ? 'border-rose-900/60 bg-rose-950/30 text-rose-300' : 'border-emerald-900/60 bg-emerald-950/30 text-emerald-300'}`}>
+            {actionFeedback.message}
+          </p>
+        )}
 
         {/* Tab Navigation: Functional Segmented Buttons */}
         <div className="flex items-center gap-1 overflow-x-auto pb-2 mb-8 border-b border-slate-800/80">
@@ -325,7 +399,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>Ingestion Daemon & Logs</span>
+              <span>Activity & Ingestion Status</span>
           </button>
 
           <button
@@ -336,7 +410,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>Verified Sources ({sources.length})</span>
+            <span>Configured Sources ({sources.length})</span>
           </button>
 
           <button
@@ -350,46 +424,22 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
             <span>Archive & Ledger</span>
           </button>
 
-          <button
-            onClick={() => setActiveTab('manifests')}
-            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'manifests'
-                ? 'border-amber-500 text-amber-300 bg-amber-950/20'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <span>Deployment Code & Docker</span>
-          </button>
         </div>
 
         {/* TAB 1: PENDING QUEUE */}
         {activeTab === 'pending' && (
           <div className="space-y-6">
-            {lastIngestResult && (
-              <div className="p-4 rounded-lg bg-emerald-950/20 border border-emerald-800/40 text-xs font-mono text-emerald-300 flex items-center justify-between">
-                <span>
-                  ✓ Ingestion Cycle Complete: {lastIngestResult.new_items_ingested} new dispatches queued, {lastIngestResult.duplicates_prevented} duplicate URLs filtered via SHA-256.
-                </span>
-                <button
-                  onClick={() => setLastIngestResult(null)}
-                  className="text-slate-400 hover:text-slate-200"
-                >
-                  ✕
-                </button>
-              </div>
-            )}
-
             {loadingPending ? (
               <div className="p-12 text-amber-500 font-mono text-center">
-                Querying PostgreSQL Pending Articles...
+                Loading pending articles...
               </div>
             ) : pendingArticles.length === 0 ? (
               <div className="py-20 text-center rounded-xl border border-dashed border-slate-800 bg-[#0A0C10] p-8">
                 <p className="text-slate-400 font-mono text-sm">
-                  No pending articles awaiting review. Ingestion daemon is idle.
+                  No articles are awaiting editorial review.
                 </p>
                 <p className="text-xs text-slate-600 font-mono mt-2">
-                  Click "Run Ingestion Daemon" to poll RSS endpoints or inspect the Sources registry.
+                  No live feed adapter is configured. The source registry remains available for future setup.
                 </p>
               </div>
             ) : (
@@ -453,7 +503,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                         onClick={() => handleAction(item.id, 'APPROVE')}
                         className="flex-1 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase px-4 py-2.5 rounded shadow hover:brightness-110 tracking-wider transition-all"
                       >
-                        Publish Wire
+                        Approve draft
                       </button>
 
                       <button
@@ -477,25 +527,25 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
           </div>
         )}
 
-        {/* TAB 2: INGESTION DAEMON CONSOLE */}
+        {/* TAB 2: INGESTION STATUS AND ACTIVITY LOG */}
         {activeTab === 'daemon' && (
           <div className="space-y-6">
             <div className="p-6 rounded-lg border border-slate-800 bg-[#090B10] space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-800 pb-4">
                 <div>
                   <h3 className="text-base font-mono font-bold text-amber-400">
-                    Background Ingestion Daemon (Python/Cron Worker)
+                    Ingestion status
                   </h3>
                   <p className="text-xs text-slate-400 mt-1">
-                    Automated SHA-256 deduplication and keyword matching against active feeds every 60 minutes.
+                    No external feeds are fetched in this version. An ingestion adapter must be configured before a run can add articles.
                   </p>
                 </div>
                 <button
                   onClick={handleTriggerIngest}
-                  disabled={runningIngest}
+                  disabled
                   className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase rounded transition-colors disabled:opacity-50"
                 >
-                  {runningIngest ? 'Ingesting Feeds...' : 'Execute Immediate Cycle'}
+                  Ingestion not configured
                 </button>
               </div>
 
@@ -529,10 +579,10 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="text-lg font-serif font-bold text-slate-100">
-                  Verified Ingestion Sources
+                  Configured News Sources
                 </h3>
                 <p className="text-xs font-mono text-slate-400 mt-0.5">
-                  Pre-configured RSS endpoints monitored for Dharmic Renaissance dispatches
+                  RSS endpoints saved for future ingestion setup
                 </p>
               </div>
               <button
@@ -547,7 +597,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
             {addingSource && (
               <form onSubmit={handleAddSource} className="p-5 rounded-lg border border-amber-900/40 bg-[#0B0E14] space-y-4">
                 <h4 className="text-xs font-mono uppercase tracking-wider text-amber-400 font-bold">
-                  Register New Monitored RSS Feed
+                  Register an RSS endpoint
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <input
@@ -578,7 +628,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                   type="submit"
                   className="px-4 py-2 bg-amber-500 text-slate-950 font-bold text-xs uppercase rounded hover:bg-amber-400 transition-colors"
                 >
-                  Save Source to Database
+                  Save Source in Memory
                 </button>
               </form>
             )}
@@ -634,16 +684,16 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <h3 className="text-lg font-serif font-bold text-slate-100">
-                  Articles Ledger & Audit Trail
+                  Editorial archive
                 </h3>
                 <p className="text-xs font-mono text-slate-400">
-                  All articles recorded in PostgreSQL with immutable SHA-256 hash deduplication
+                  Process-local editorial records; changes reset when the server restarts.
                 </p>
               </div>
 
               {/* Status Filter Buttons */}
               <div className="flex items-center gap-1 bg-[#0A0C10] p-1 border border-slate-800 rounded-md">
-                {(['ALL', 'APPROVED', 'DISCARDED'] as const).map(st => (
+                {(['ALL', 'APPROVED', 'PUBLISHED', 'DISCARDED'] as const).map(st => (
                   <button
                     key={st}
                     onClick={() => setArchiveStatusFilter(st)}
@@ -668,7 +718,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                     <div className="space-y-1">
                       <div className="flex items-center gap-2 font-mono text-slate-400">
                         <span className={`px-2 py-0.5 rounded text-[10px] ${
-                          item.status === 'APPROVED' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/50' :
+                          item.status === 'PUBLISHED' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800/50' :
                           item.status === 'DISCARDED' ? 'bg-rose-950 text-rose-400 border border-rose-800/50' :
                           'bg-amber-950 text-amber-400 border border-amber-800/50'
                         }`}>
@@ -685,34 +735,20 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2 self-end sm:self-center">
-                      {item.status === 'DISCARDED' && (
-                        <button
-                          onClick={async () => {
-                            await fetch('/api/admin/articles/action', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ article_id: item.id, action: 'RESTORE' })
-                            });
-                            fetchArchive();
-                            fetchPending();
-                          }}
-                          className="px-2.5 py-1 text-xs border border-amber-500/50 text-amber-300 rounded hover:bg-amber-500/10"
-                        >
-                          Restore to Pending
-                        </button>
-                      )}
                       {item.status === 'APPROVED' && (
                         <button
-                          onClick={async () => {
-                            await fetch('/api/admin/articles/action', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ article_id: item.id, action: 'DISCARD' })
-                            });
-                            fetchArchive();
-                            onRefreshStats?.();
-                          }}
-                          className="px-2.5 py-1 text-xs border border-rose-900/50 text-rose-400 rounded hover:bg-rose-900/20"
+                          disabled={actingArticleId === item.id}
+                          onClick={() => handleArchiveAction(item.id, 'PUBLISH')}
+                          className="px-2.5 py-1 text-xs border border-emerald-900/50 text-emerald-400 rounded hover:bg-emerald-900/20 disabled:opacity-50"
+                        >
+                          Publish
+                        </button>
+                      )}
+                      {item.status === 'PUBLISHED' && (
+                        <button
+                          disabled={actingArticleId === item.id}
+                          onClick={() => handleArchiveAction(item.id, 'UNPUBLISH')}
+                          className="px-2.5 py-1 text-xs border border-rose-900/50 text-rose-400 rounded hover:bg-rose-900/20 disabled:opacity-50"
                         >
                           Unpublish
                         </button>
@@ -733,77 +769,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
           </div>
         )}
 
-        {/* TAB 5: ARCHITECTURE & DEPLOYMENT MANIFESTS */}
-        {activeTab === 'manifests' && manifests && (
-          <div className="space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-serif font-bold text-slate-100">
-                  Infrastructure & Deployment Artifacts
-                </h3>
-                <p className="text-xs font-mono text-slate-400">
-                  Production files ready for deployment on Docker, PostgreSQL, and Crontab
-                </p>
-              </div>
 
-              <button
-                onClick={copyManifestToClipboard}
-                className="px-3.5 py-1.5 bg-amber-500 text-slate-950 font-bold text-xs uppercase rounded hover:bg-amber-400 transition-colors"
-              >
-                {copiedManifest ? '✓ Copied to Clipboard' : 'Copy Manifest Code'}
-              </button>
-            </div>
-
-            {/* Manifest Selection Buttons */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2">
-              <button
-                onClick={() => setSelectedManifest('python_daemon')}
-                className={`px-3 py-1.5 text-xs font-mono rounded ${
-                  selectedManifest === 'python_daemon'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
-                    : 'bg-[#0A0C10] text-slate-400 border border-slate-800'
-                }`}
-              >
-                ingestion_daemon.py
-              </button>
-              <button
-                onClick={() => setSelectedManifest('schema_sql')}
-                className={`px-3 py-1.5 text-xs font-mono rounded ${
-                  selectedManifest === 'schema_sql'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
-                    : 'bg-[#0A0C10] text-slate-400 border border-slate-800'
-                }`}
-              >
-                schema.sql (PostgreSQL)
-              </button>
-              <button
-                onClick={() => setSelectedManifest('dockerfile')}
-                className={`px-3 py-1.5 text-xs font-mono rounded ${
-                  selectedManifest === 'dockerfile'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
-                    : 'bg-[#0A0C10] text-slate-400 border border-slate-800'
-                }`}
-              >
-                Dockerfile
-              </button>
-              <button
-                onClick={() => setSelectedManifest('crontab')}
-                className={`px-3 py-1.5 text-xs font-mono rounded ${
-                  selectedManifest === 'crontab'
-                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
-                    : 'bg-[#0A0C10] text-slate-400 border border-slate-800'
-                }`}
-              >
-                crontab (Hourly Cron)
-              </button>
-            </div>
-
-            {/* Code Viewer */}
-            <pre className="p-5 rounded-lg bg-black border border-slate-800 text-xs font-mono text-slate-300 overflow-x-auto max-h-[500px]">
-              <code>{manifests[selectedManifest]}</code>
-            </pre>
-          </div>
-        )}
 
       </div>
 
@@ -873,6 +839,8 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                     <option value="SCIENCE">SCIENCE (विज्ञान)</option>
                     <option value="SANSKRIT">SANSKRIT (संस्कृत)</option>
                     <option value="GENERAL">GENERAL (सामान्य)</option>
+                    <option value="GOVERNANCE">GOVERNANCE</option>
+                    <option value="NARRATIVE_FACTS">FACT SHIELD</option>
                   </select>
                 </div>
 
@@ -880,7 +848,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                   <label className="block text-slate-400 font-mono mb-1">Curatorial Note (Optional)</label>
                   <input
                     type="text"
-                    placeholder="e.g. Verified with ASI National Epigraphy Archive"
+                    placeholder="Add a source or review note"
                     value={editNotes}
                     onChange={(e) => setEditNotes(e.target.value)}
                     className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100"
@@ -900,7 +868,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 onClick={handleUpdateAndApprove}
                 className="px-5 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase rounded hover:brightness-110"
               >
-                Publish Modifications to Wire
+                Save and approve draft
               </button>
             </div>
           </div>

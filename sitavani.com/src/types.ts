@@ -1,4 +1,4 @@
-export type ArticleStatus = 'PENDING' | 'APPROVED' | 'DISCARDED';
+export type ArticleStatus = 'PENDING' | 'APPROVED' | 'PUBLISHED' | 'DISCARDED';
 
 export type NewsCategory = 
   | 'HERITAGE' 
@@ -16,6 +16,7 @@ export interface Article {
   id: string;
   source_id: number;
   source_name: string;
+  source_identifier?: string;
   url_hash: string; // SHA-256 hash of original URL
   original_url: string;
   title: string;
@@ -27,7 +28,10 @@ export interface Article {
   category: NewsCategory;
   status: ArticleStatus;
   created_at: string;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
   approved_at: string | null;
+  published_at?: string | null;
   editorial_notes: string | null;
   matched_keywords?: string[];
   salience?: 'LEAD' | 'FEATURE' | 'WIRE';
@@ -54,12 +58,13 @@ export interface DaemonLog {
 
 export interface FeedStats {
   total_approved: number;
+  total_published: number;
   total_pending: number;
   total_discarded: number;
   total_sources: number;
   active_sources: number;
   category_counts: Record<NewsCategory, number>;
-  last_daemon_run: string;
+  last_daemon_run: string | null;
 }
 
 export interface BharatShaktiMetric {
