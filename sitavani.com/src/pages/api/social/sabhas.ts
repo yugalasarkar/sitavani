@@ -6,7 +6,7 @@ export const prerender = false;
 
 export const GET: APIRoute = async () => {
   try {
-    const sabhas = await socialRepository.listSabhas();
+    const sabhas = await socialRepository.getSabhas();
     return new Response(JSON.stringify({ sabhas }), {
       status: 200,
       headers: { 'Content-Type': 'application/json' }

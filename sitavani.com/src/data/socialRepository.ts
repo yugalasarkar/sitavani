@@ -22,6 +22,10 @@ export class SocialRepository {
     return res.rows;
   }
 
+  async listSabhas(): Promise<Sabha[]> {
+    return this.getSabhas();
+  }
+
   async listPosts(options: {
     sabha?: string;
     sort?: 'hot' | 'new' | 'top';
