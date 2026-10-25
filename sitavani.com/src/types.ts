@@ -147,6 +147,7 @@ export interface Sabha {
   icon: string;
   color: string;
   is_official: boolean;
+  creator_address?: string;
 }
 
 export interface Post {
@@ -260,4 +261,11 @@ export interface UserProfileData {
   comments_count: number;
   sabha_reputation: SabhaReputation[];
   tips_received_total: number;
+}
+
+export interface PollSummary {
+  question: string;
+  options: { label: string; votes: number }[];
+  totalVotes: number;
+  userSelectedOption?: number;
 }

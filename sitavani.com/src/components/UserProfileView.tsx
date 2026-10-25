@@ -14,7 +14,9 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
 }) => {
   const [profile, setProfile] = useState<UserProfileData>(initialData);
   const [posts, setPosts] = useState<Post[]>(initialPosts);
-  const [activeTab, setActiveTab] = useState<'submissions' | 'reputation'>('submissions');
+  const [activeTab, setActiveTab] = useState<'submissions' | 'reputation' | 'saved'>('submissions');
+  const [savedPosts, setSavedPosts] = useState<Post[]>([]);
+  const [loadingSaved, setLoadingSaved] = useState(false);
   
   // Edit Profile Modal
   const [showEditModal, setShowEditModal] = useState(false);
@@ -22,6 +24,21 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
   const [bioInput, setBioInput] = useState(profile.user.bio || '');
   const [savingProfile, setSavingProfile] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  const fetchSavedPosts = async () => {
+    setLoadingSaved(true);
+    try {
+      const res = await fetch('/api/social/bookmarks');
+      if (res.ok) {
+        const data = await res.json();
+        setSavedPosts(data.posts || []);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingSaved(false);
+    }
+  };
 
   const isOwner = viewerAddress && viewerAddress.toLowerCase() === profile.user.wallet_address.toLowerCase();
   const isAdmin = profile.user.role === 'ADMIN' || profile.user.wallet_address.toLowerCase() === '0xd22913b647d905d931e4dbbc36b2eecabb78329b';
@@ -144,9 +161,20 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
               ) : null}
             </div>
 
-            <p className="font-mono text-xs text-slate-400 select-all break-all">
-              {profile.user.wallet_address}
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-mono text-xs text-slate-400 select-all break-all">
+                {profile.user.wallet_address}
+              </p>
+              <a
+                href={`https://satya.yugala.org/address/${profile.user.wallet_address}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-mono transition-colors flex items-center gap-1 font-semibold"
+                title="Inspect on Satya Sovereign Block Explorer"
+              >
+                <span>Satya Explorer ↗</span>
+              </a>
+            </div>
 
             {profile.user.bio && (
               <p className="text-xs sm:text-sm text-slate-300 leading-relaxed max-w-3xl font-sans">
@@ -207,6 +235,22 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
         >
           <span>🏛️ मण्डल-ख्यातिः Sabha Reputation Matrix</span>
         </button>
+
+        {isOwner && (
+          <button
+            onClick={() => {
+              setActiveTab('saved');
+              fetchSavedPosts();
+            }}
+            className={`px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2 ${
+              activeTab === 'saved'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span>🔖 संग्रहः Saved Dispatches</span>
+          </button>
+        )}
       </div>
 
       {/* TAB: SUBMISSIONS */}
@@ -270,6 +314,37 @@ export const UserProfileView: React.FC<UserProfileViewProps> = ({
                   <span>{rep.name_en}</span>
                   <span>{rep.posts_count} dispatches</span>
                 </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {/* TAB: SAVED DISPATCHES */}
+      {activeTab === 'saved' && (
+        <div className="space-y-4">
+          {loadingSaved ? (
+            <div className="p-12 text-center text-slate-500 text-xs font-mono animate-pulse">
+              Loading bookmarked dispatches...
+            </div>
+          ) : savedPosts.length === 0 ? (
+            <div className="p-12 text-center rounded-xl bg-[#0A0C12] border border-dashed border-slate-800 text-slate-500 text-xs font-mono">
+              No saved dispatches found. Click 🔖 on any post to bookmark it for quick access.
+            </div>
+          ) : (
+            savedPosts.map(p => (
+              <div key={p.id} className="p-5 rounded-xl bg-[#0A0C12] border border-amber-950/40 hover:border-amber-800/60 transition-colors space-y-2">
+                <div className="flex items-center gap-2 text-[11px] font-mono text-slate-400">
+                  <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                    s/{p.sabha_slug}
+                  </span>
+                  <span>•</span>
+                  <span>{new Date(p.created_at).toLocaleDateString()}</span>
+                  <span className="ml-auto text-amber-400 font-bold">+{p.score} पुण्य</span>
+                </div>
+                <a href={`/p/${p.id}`} className="block font-serif font-bold text-base text-slate-100 hover:text-amber-300 transition-colors">
+                  {p.title}
+                </a>
               </div>
             ))
           )}

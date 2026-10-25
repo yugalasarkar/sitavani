@@ -1,5 +1,6 @@
 ---
 import { WalletNav } from './WalletNav';
+import { KasturiPulse } from './KasturiPulse';
 import type { DisplayLanguage } from '../types';
 
 interface Props {
@@ -75,6 +76,9 @@ const hrefForLang = (lang: string) => {
           </a>
         ))}
       </nav>
+
+      <!-- Kasturi EVM Pulse -->
+      <KasturiPulse client:load />
 
       <!-- MetaMask Connect Island -->
       <WalletNav client:load />

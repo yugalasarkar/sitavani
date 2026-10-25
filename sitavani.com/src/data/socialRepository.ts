@@ -780,6 +780,121 @@ export class SocialRepository {
     );
     return res.rowCount !== null && res.rowCount > 0;
   }
+
+  // --- SUB-SITAVANI (UPA-SABHA) CREATION ---
+
+  async createSabha(data: {
+    slug: string;
+    nameSa: string;
+    nameEn: string;
+    nameHi: string;
+    descriptionEn?: string;
+    descriptionHi?: string;
+    icon?: string;
+    color?: string;
+    creatorAddress: string;
+  }): Promise<Sabha> {
+    const slug = data.slug.toLowerCase().trim();
+    if (!/^[a-z0-9_-]{2,30}$/.test(slug)) {
+      throw new Error('Sabha slug must be 2-30 lowercase alphanumeric characters or hyphens.');
+    }
+
+    const res = await this.pool.query<Sabha>(
+      `INSERT INTO sabhas (slug, name_sa, name_en, name_hi, description_en, description_hi, icon, color, is_official, creator_address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE, $9)
+       RETURNING *`,
+      [
+        slug,
+        data.nameSa.trim(),
+        data.nameEn.trim(),
+        data.nameHi.trim(),
+        data.descriptionEn?.trim() || '',
+        data.descriptionHi?.trim() || '',
+        data.icon?.trim() || '🏛️',
+        data.color?.trim() || '#F59E0B',
+        data.creatorAddress.toLowerCase()
+      ]
+    );
+    return res.rows[0];
+  }
+
+  // --- BOOKMARKS (संग्रहः) ---
+
+  async toggleBookmark(userAddress: string, postId: string): Promise<{ bookmarked: boolean }> {
+    const addr = userAddress.toLowerCase();
+    const existing = await this.pool.query(
+      'SELECT 1 FROM bookmarks WHERE user_address = $1 AND post_id = $2',
+      [addr, postId]
+    );
+
+    if (existing.rows.length > 0) {
+      await this.pool.query('DELETE FROM bookmarks WHERE user_address = $1 AND post_id = $2', [addr, postId]);
+      return { bookmarked: false };
+    } else {
+      await this.pool.query('INSERT INTO bookmarks (user_address, post_id) VALUES ($1, $2)', [addr, postId]);
+      return { bookmarked: true };
+    }
+  }
+
+  async listBookmarkedPosts(userAddress: string): Promise<Post[]> {
+    const addr = userAddress.toLowerCase();
+    const res = await this.pool.query(
+      `SELECT p.id, p.sabha_slug, p.author_address, p.title, p.content, p.original_url, p.media_url,
+              p.is_pinned, p.is_official_dispatch, p.is_misinformation, p.admin_warning_note,
+              p.upvotes, p.downvotes, p.score, p.comments_count, p.chain_tx_hash, p.created_at,
+              u.display_name as author_name, u.avatar_url as author_avatar, u.role as author_role,
+              u.warnings_count as author_warnings, u.is_banned as author_is_banned,
+              v.vote_value as user_vote
+       FROM bookmarks b
+       JOIN posts p ON p.id = b.post_id
+       LEFT JOIN users u ON u.wallet_address = p.author_address
+       LEFT JOIN post_votes v ON v.post_id = p.id AND v.user_address = $1
+       WHERE b.user_address = $1 AND p.is_deleted = FALSE
+       ORDER BY b.created_at DESC`,
+      [addr]
+    );
+    return res.rows.map(r => this.mapPostRow(r));
+  }
+
+  // --- COMMUNITY POLLS (प्रश्नोत्तरी) ---
+
+  async recordPollVote(postId: string, userAddress: string, optionIndex: number): Promise<void> {
+    const addr = userAddress.toLowerCase();
+    await this.ensureUser(addr);
+    await this.pool.query(
+      `INSERT INTO poll_votes (post_id, user_address, option_index)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (post_id, user_address) DO UPDATE SET option_index = $3, created_at = NOW()`,
+      [postId, addr, optionIndex]
+    );
+  }
+
+  async getPollVotes(postId: string, userAddress?: string): Promise<{ votesByOption: Record<number, number>; totalVotes: number; userSelectedOption?: number }> {
+    const res = await this.pool.query(
+      'SELECT option_index, COUNT(*)::int as count FROM poll_votes WHERE post_id = $1 GROUP BY option_index',
+      [postId]
+    );
+
+    const votesByOption: Record<number, number> = {};
+    let totalVotes = 0;
+    for (const row of res.rows) {
+      votesByOption[row.option_index] = row.count;
+      totalVotes += row.count;
+    }
+
+    let userSelectedOption: number | undefined;
+    if (userAddress) {
+      const uRes = await this.pool.query(
+        'SELECT option_index FROM poll_votes WHERE post_id = $1 AND user_address = $2',
+        [postId, userAddress.toLowerCase()]
+      );
+      if (uRes.rows.length > 0) {
+        userSelectedOption = uRes.rows[0].option_index;
+      }
+    }
+
+    return { votesByOption, totalVotes, userSelectedOption };
+  }
 }
 
 export const socialRepository = new SocialRepository();

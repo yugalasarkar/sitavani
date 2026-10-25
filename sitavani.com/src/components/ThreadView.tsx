@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { Post, Comment, Sabha } from '../types';
 import { NilaTipModal } from './NilaTipModal';
 import { ShlokaView } from './ShlokaView';
+import { PollWidget } from './PollWidget';
 
 interface ThreadViewProps {
   post: Post;
@@ -19,13 +20,33 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
   const [submitting, setSubmitting] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [tippingTarget, setTippingTarget] = useState<{ address: string; name?: string; type: 'POST' | 'COMMENT'; id: string } | null>(null);
+  const [isBookmarked, setIsBookmarked] = useState(false);
+
+  const handleToggleBookmark = async () => {
+    if (!userSession) {
+      showToast('Please connect your MetaMask wallet to bookmark dispatches.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/social/bookmarks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId: post.id })
+      });
+      const data = await res.json();
+      setIsBookmarked(data.bookmarked);
+      showToast(data.bookmarked ? '🔖 Dispatch saved to your संग्रहः (Bookmarks)!' : 'Bookmark removed.');
+    } catch (e: any) {
+      showToast('Failed to update bookmark.');
+    }
+  };
 
   const renderFormattedContent = (text: string) => {
-    if (!text || !text.includes(':::shloka')) {
+    if (!text || (!text.includes(':::shloka') && !text.includes(':::poll'))) {
       return <div className="whitespace-pre-wrap">{text}</div>;
     }
 
-    const parts = text.split(/(:::shloka[\s\S]*?:::)/g);
+    const parts = text.split(/(:::shloka[\s\S]*?:::|:::poll[\s\S]*?:::)/g);
     return (
       <div className="space-y-4">
         {parts.map((part, index) => {
@@ -65,6 +86,22 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
               />
             );
           }
+
+          if (part.startsWith(':::poll') && part.endsWith(':::')) {
+            const inner = part.replace(/^:::poll\s*/, '').replace(/\s*:::$/, '');
+            const lines = inner.split('\n').map(l => l.trim()).filter(l => l && l !== '---');
+            const question = lines[0] || 'Dialectic Referendum';
+            const options = lines.slice(1);
+            return (
+              <PollWidget
+                key={index}
+                postId={post.id}
+                question={question}
+                options={options.length > 0 ? options : ['सम्मति Accord', 'असम्मति Dissent']}
+              />
+            );
+          }
+
           if (!part.trim()) return null;
           return <p key={index} className="whitespace-pre-wrap">{part.trim()}</p>;
         })}
@@ -502,6 +539,18 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
                   <span>SITAVANI Vārtā | आधिकारिक संवाद</span>
                 </span>
               )}
+
+              {post.chain_tx_hash && (
+                <a
+                  href={`https://satya.yugala.org/tx/${post.chain_tx_hash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 bg-emerald-950/30 hover:bg-emerald-900/50 border border-emerald-800/40 px-2 py-0.5 rounded transition-colors"
+                  title="View on Satya Block Explorer"
+                >
+                  <span>⛓️ कस्तूरी Verified ↗</span>
+                </a>
+              )}
             </div>
 
             <span className="text-slate-500 font-mono text-[11px]">
@@ -609,6 +658,16 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
               <span className="text-slate-400">
                 💬 {post.comments_count} विचाराः (Comments)
               </span>
+
+              <button
+                onClick={handleToggleBookmark}
+                className={`px-3 py-1 rounded border transition-colors flex items-center gap-1 ${
+                  isBookmarked ? 'bg-amber-500/20 text-amber-300 border-amber-500/40' : 'bg-[#07090E] border-slate-800 text-slate-300 hover:text-amber-300'
+                }`}
+                title="Save dispatch to bookmarks"
+              >
+                <span>{isBookmarked ? '🔖 रक्षितम् Saved' : '🔖 संग्रहः Save'}</span>
+              </button>
 
               <button
                 onClick={handleShare}

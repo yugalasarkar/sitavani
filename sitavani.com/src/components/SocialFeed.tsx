@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Post, Sabha } from '../types';
 import { NilaTipModal } from './NilaTipModal';
+import { CreateSubSitavaniModal } from './CreateSubSitavaniModal';
 
 interface SocialFeedProps {
   initialPosts: Post[];
@@ -18,12 +19,15 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
   language = 'dual'
 }) => {
   const [posts, setPosts] = useState<Post[]>(initialPosts);
+  const [sabhasList, setSabhasList] = useState<Sabha[]>(sabhas);
   const [selectedSabha, setSelectedSabha] = useState<string>(currentSabha);
   const [sort, setSort] = useState<'hot' | 'new' | 'top'>(currentSort);
+  const [searchQuery, setSearchQuery] = useState('');
   const [session, setSession] = useState<{ authenticated: boolean; address?: string; isAdmin?: boolean; user?: any } | null>(null);
   
   // Post creation modal
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateSabhaModal, setShowCreateSabhaModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newContent, setNewContent] = useState('');
   const [newSabha, setNewSabha] = useState('varta');
@@ -235,8 +239,57 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
     }
   };
 
+  const handleToggleBookmark = async (postId: string) => {
+    if (!session?.authenticated) {
+      alert('Please connect your MetaMask wallet to bookmark dispatches.');
+      return;
+    }
+    try {
+      const res = await fetch('/api/social/bookmarks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId })
+      });
+      const data = await res.json();
+      alert(data.bookmarked ? '🔖 Dispatch saved to your संग्रहः (Bookmarks)!' : 'Bookmark removed.');
+    } catch (e: any) {
+      alert('Failed to update bookmark.');
+    }
+  };
+
+  const filteredPosts = posts.filter(p => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase();
+    return (
+      p.title.toLowerCase().includes(q) ||
+      p.content?.toLowerCase().includes(q) ||
+      p.author_name?.toLowerCase().includes(q) ||
+      p.sabha_slug.toLowerCase().includes(q)
+    );
+  });
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
+      {/* Search & Discovery Bar */}
+      <div className="relative">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          placeholder="अन्वेषणम् Search dispatches, concepts, or scholars across Sitavani..."
+          className="w-full bg-[#0A0C12] border border-amber-950/60 rounded-xl px-4 py-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-amber-500/60 font-mono pl-9 transition-colors"
+        />
+        <span className="absolute left-3 top-2.5 text-slate-500 text-xs">🔍</span>
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-2.5 text-slate-400 hover:text-white text-xs font-mono"
+          >
+            ✕ Clear
+          </button>
+        )}
+      </div>
+
       {/* Top Controls: Sabha Filter Pills & New Post Trigger */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-[#0A0C12] border border-amber-950/40">
         {/* Sabha Category Pills */}
@@ -251,7 +304,7 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
           >
             सर्वाणि All Sabhas
           </button>
-          {sabhas.map(s => (
+          {sabhasList.map(s => (
             <button
               key={s.slug}
               onClick={() => handleSabhaChange(s.slug)}
@@ -267,20 +320,37 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
           ))}
         </div>
 
-        {/* Create Post Button */}
-        <button
-          onClick={() => {
-            if (!session?.authenticated) {
-              alert('Please connect your MetaMask wallet first to create dispatches.');
-              return;
-            }
-            setShowCreateModal(true);
-          }}
-          className="shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-lg hover:brightness-110 shadow-md shadow-amber-500/20 transition-all"
-        >
-          <span>✍️</span>
-          <span>प्रकाशनम् New Dispatch</span>
-        </button>
+        {/* Action Buttons: New Sabha & New Dispatch */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => {
+              if (!session?.authenticated) {
+                alert('Please connect your MetaMask wallet first to establish a Sub-Sitavani Sabha.');
+                return;
+              }
+              setShowCreateSabhaModal(true);
+            }}
+            className="flex items-center justify-center gap-1.5 px-3 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-semibold rounded-lg transition-all"
+            title="Establish new Sub-Sitavani Sabha"
+          >
+            <span>🏛️</span>
+            <span>+ उप-सीतावाणी Sabha</span>
+          </button>
+
+          <button
+            onClick={() => {
+              if (!session?.authenticated) {
+                alert('Please connect your MetaMask wallet first to create dispatches.');
+                return;
+              }
+              setShowCreateModal(true);
+            }}
+            className="flex items-center justify-center gap-1.5 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-lg hover:brightness-110 shadow-md shadow-amber-500/20 transition-all"
+          >
+            <span>✍️</span>
+            <span>प्रकाशनम् New</span>
+          </button>
+        </div>
       </div>
 
       {/* Sorting Tabs: Hot / New / Top */}
@@ -415,14 +485,16 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
 
       {/* Feed Stream */}
       <div className="space-y-4">
-        {posts.length === 0 ? (
+        {filteredPosts.length === 0 ? (
           <div className="p-12 text-center rounded-xl bg-[#0A0C12] border border-amber-950/40 text-slate-400 space-y-2">
             <p className="font-serif text-lg text-slate-200">न कोऽपि संवादः अस्मिन् मण्डले।</p>
-            <p className="text-xs text-slate-500 font-mono">No discussions found in this Sabha yet. Be the first to discourse!</p>
+            <p className="text-xs text-slate-500 font-mono">
+              {searchQuery ? 'No matching dispatches found for this search.' : 'No discussions found in this Sabha yet. Be the first to discourse!'}
+            </p>
           </div>
         ) : (
-          posts.map(post => {
-            const sabha = sabhas.find(s => s.slug === post.sabha_slug);
+          filteredPosts.map(post => {
+            const sabha = sabhasList.find(s => s.slug === post.sabha_slug);
             const authorShort = post.author_address.slice(0, 6) + '...' + post.author_address.slice(-4);
             const formattedDate = new Date(post.created_at).toLocaleDateString(undefined, {
               month: 'short',
@@ -520,9 +592,15 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
                     )}
 
                     {post.chain_tx_hash && (
-                      <span className="ml-auto inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/30 border border-emerald-800/40 px-2 py-0.5 rounded" title={`Kasturi Block Hash: ${post.chain_tx_hash}`}>
-                        <span>⛓️ कस्तूरी Validated</span>
-                      </span>
+                      <a
+                        href={`https://satya.yugala.org/tx/${post.chain_tx_hash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ml-auto inline-flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-emerald-950/30 hover:bg-emerald-900/50 border border-emerald-800/40 px-2 py-0.5 rounded transition-colors"
+                        title={`View on Satya Block Explorer: ${post.chain_tx_hash}`}
+                      >
+                        <span>⛓️ कस्तूरी Validated ↗</span>
+                      </a>
                     )}
                   </div>
 
@@ -579,6 +657,14 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
                         title="Gift NILA (नीला) native coins on Kasturi Chain"
                       >
                         <span>🎁 दक्षिणा Nīlā</span>
+                      </button>
+
+                      <button
+                        onClick={() => handleToggleBookmark(post.id)}
+                        className="flex items-center gap-1 hover:text-amber-300 transition-colors py-1 text-slate-400"
+                        title="Save dispatch to bookmarks"
+                      >
+                        <span>🔖 संग्रहः Save</span>
                       </button>
                     </div>
 
@@ -647,6 +733,19 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
           onSuccess={(amount, txHash) => {
             alert(`Dakṣiṇā of ${amount} Nīlā transferred successfully on Kasturi Chain! Tx: ${txHash.slice(0, 10)}...`);
             setTippingPost(null);
+          }}
+        />
+      )}
+
+      {/* Sub-Sitavani (Upa-Sabha) Creation Modal */}
+      {showCreateSabhaModal && (
+        <CreateSubSitavaniModal
+          onClose={() => setShowCreateSabhaModal(false)}
+          onSuccess={(newSabha) => {
+            setSabhasList(prev => [...prev, newSabha]);
+            setShowCreateSabhaModal(false);
+            alert(`Sub-Sitavani Sabha s/${newSabha.slug} successfully established!`);
+            window.location.href = `/s/${newSabha.slug}`;
           }}
         />
       )}

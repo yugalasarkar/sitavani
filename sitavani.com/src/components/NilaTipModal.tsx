@@ -60,7 +60,8 @@ export const NilaTipModal: React.FC<NilaTipModalProps> = ({
               chainId: KASTURI_CHAIN_ID_HEX,
               chainName: 'Kasturi Sovereign Chain',
               nativeCurrency: { name: 'NILA', symbol: 'NILA', decimals: 18 },
-              rpcUrls: ['https://sitavani.com/rpc']
+              rpcUrls: ['https://sitavani.com/rpc'],
+              blockExplorerUrls: ['https://satya.yugala.org']
             }]
           });
         }
@@ -143,8 +144,18 @@ export const NilaTipModal: React.FC<NilaTipModalProps> = ({
             <p className="text-slate-300">
               Gift recorded on Kasturi Chain ledger.
             </p>
-            <div className="text-[10px] text-slate-400 break-all select-all pt-1">
+            <div className="text-[11px] text-slate-300 break-all select-all pt-1">
               Tx: {successHash}
+            </div>
+            <div className="pt-1">
+              <a
+                href={`https://satya.yugala.org/tx/${successHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-amber-400 hover:text-amber-300 hover:underline flex items-center gap-1 text-xs font-mono"
+              >
+                <span>🔍 View on Satya Explorer (satya.yugala.org) ↗</span>
+              </a>
             </div>
             <div className="pt-2">
               <button
