@@ -44,6 +44,8 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   const [newSourceUrl, setNewSourceUrl] = useState('');
   const [newSourceRss, setNewSourceRss] = useState('');
   const [addingSource, setAddingSource] = useState(false);
+  const [togglingId, setTogglingId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   // Daemon state
   const [daemonLogs, setDaemonLogs] = useState<DaemonLog[]>([]);
@@ -414,7 +416,10 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     }
   };
 
-  const handleToggleSource = async (id: string, active: boolean) => {
+  const handleToggleSource = async (id: number | string, active: boolean) => {
+    const numId = Number(id);
+    setTogglingId(numId);
+    setActionFeedback(null);
     try {
       await adminRequest(`/api/admin/sources/${id}`, {
         method: 'PATCH',
@@ -422,18 +427,27 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
         body: JSON.stringify({ active })
       });
       await fetchSources();
+      setActionFeedback({ kind: 'success', message: `Source status updated successfully.` });
     } catch (e) {
       setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to update source.' });
+    } finally {
+      setTogglingId(null);
     }
   };
 
-  const handleDeleteSource = async (id: string) => {
+  const handleDeleteSource = async (id: number | string) => {
     if (!confirm('Permanently remove this source configuration?')) return;
+    const numId = Number(id);
+    setDeletingId(numId);
+    setActionFeedback(null);
     try {
       await adminRequest(`/api/admin/sources/${id}`, { method: 'DELETE' });
       await fetchSources();
+      setActionFeedback({ kind: 'success', message: 'Source deleted successfully.' });
     } catch (e) {
       setActionFeedback({ kind: 'error', message: e instanceof Error ? e.message : 'Failed to delete source.' });
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -668,9 +682,16 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
         </header>
 
         {actionFeedback && (
-          <p role={actionFeedback.kind === 'error' ? 'alert' : 'status'} className={`mb-6 rounded-lg border px-4 py-3 text-sm ${actionFeedback.kind === 'error' ? 'border-rose-900/60 bg-rose-950/30 text-rose-300' : 'border-emerald-900/60 bg-emerald-950/30 text-emerald-300'}`}>
-            {actionFeedback.message}
-          </p>
+          <div role={actionFeedback.kind === 'error' ? 'alert' : 'status'} className={`mb-6 rounded-lg border px-4 py-3 text-sm flex items-center justify-between gap-3 ${actionFeedback.kind === 'error' ? 'border-rose-900/60 bg-rose-950/30 text-rose-300' : 'border-emerald-900/60 bg-emerald-950/30 text-emerald-300'}`}>
+            <span>{actionFeedback.message}</span>
+            <button
+              type="button"
+              onClick={() => setActionFeedback(null)}
+              className="text-xs font-mono opacity-70 hover:opacity-100 p-1 rounded hover:bg-black/20 cursor-pointer"
+            >
+              ✕
+            </button>
+          </div>
         )}
 
         {/* Tab Navigation */}
@@ -1066,34 +1087,56 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
             </form>
 
             <div className="grid grid-cols-1 gap-3">
-              {sources.map(src => (
-                <div key={src.id} className="bg-[#0B0D13] border border-slate-800/80 rounded-xl p-4 flex items-center justify-between gap-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="font-serif font-bold text-sm text-slate-200">{src.name}</span>
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded ${src.active ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-800 text-slate-400'}`}>
-                        {src.active ? 'ACTIVE' : 'PAUSED'}
-                      </span>
+              {sources.map(src => {
+                const isActive = Boolean(src.is_active);
+                return (
+                  <div key={src.id} className="bg-[#0B0D13] border border-slate-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-serif font-bold text-sm text-slate-200">{src.name}</span>
+                        <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
+                          isActive 
+                            ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' 
+                            : 'bg-slate-800 text-slate-400 border border-slate-700/60'
+                        }`}>
+                          {isActive ? '● ACTIVE' : '○ PAUSED'}
+                        </span>
+                        {typeof src.articles_count === 'number' && (
+                          <span className="text-[10px] font-mono text-slate-500">
+                            ({src.articles_count} dispatches)
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs font-mono text-slate-400 truncate max-w-xl">
+                        {src.rss_endpoint || src.base_url}
+                      </p>
                     </div>
-                    <p className="text-xs font-mono text-slate-400 truncate max-w-xl">{src.rss}</p>
-                  </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => handleToggleSource(src.id, !src.active)}
-                      className="px-2.5 py-1 text-xs font-mono rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    >
-                      {src.active ? 'विराम (Pause)' : 'प्रवर्त्य (Enable)'}
-                    </button>
-                    <button
-                      onClick={() => handleDeleteSource(src.id)}
-                      className="px-2.5 py-1 text-xs font-mono rounded bg-rose-950/60 hover:bg-rose-900 text-rose-300"
-                    >
-                      अपसारय (Delete)
-                    </button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        type="button"
+                        disabled={togglingId === src.id}
+                        onClick={() => handleToggleSource(src.id, !isActive)}
+                        className={`px-3 py-1.5 text-xs font-mono rounded transition-all cursor-pointer font-semibold ${
+                          isActive
+                            ? 'bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border border-amber-800/40'
+                            : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 border border-emerald-800/40'
+                        } disabled:opacity-50`}
+                      >
+                        {togglingId === src.id ? 'Updating...' : (isActive ? '⏸ विराम (Pause)' : '▶ प्रवर्त्य (Enable)')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={deletingId === src.id}
+                        onClick={() => handleDeleteSource(src.id)}
+                        className="px-3 py-1.5 text-xs font-mono rounded bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/40 transition-all cursor-pointer disabled:opacity-50"
+                      >
+                        {deletingId === src.id ? 'Deleting...' : '🗑️ अपसारय (Delete)'}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
