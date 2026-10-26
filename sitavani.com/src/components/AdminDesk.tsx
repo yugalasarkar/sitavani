@@ -303,6 +303,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     fetchPending();
     fetchSources();
     fetchLogs();
+    fetchArchive();
   }, [authenticated]);
 
   useEffect(() => {
@@ -646,35 +647,51 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 प्रशासकः {authAddress ? `${authAddress.slice(0, 8)}...${authAddress.slice(-6)}` : '0xD229...329b'}
               </span>
               <span>•</span>
-              <span>Pending Review: <strong className="text-amber-400 tabular-nums">{pendingArticles.length}</strong> dispatches</span>
+              <span>Pending: <strong className="text-amber-400 tabular-nums">{pendingArticles.length}</strong></span>
+              <span>•</span>
+              <button
+                type="button"
+                onClick={() => setActiveTab('archive')}
+                className="hover:underline text-slate-300 hover:text-amber-300 cursor-pointer flex items-center gap-1 font-semibold"
+              >
+                <span>Published:</span>
+                <strong className="text-emerald-400 tabular-nums">{archiveArticles.length > 0 ? archiveArticles.length : '33+'}</strong>
+                <span className="text-[10px] text-amber-400">(View All Archive →)</span>
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center flex-wrap gap-2.5">
             <a
               href="/news"
               target="_blank"
-              className="px-3 py-2 border border-slate-700 hover:border-amber-500/50 text-slate-300 hover:text-amber-300 rounded-md text-xs font-mono transition-colors"
+              rel="noreferrer"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/50 hover:border-amber-400 text-amber-300 hover:text-amber-200 rounded-md text-xs font-mono font-bold transition-all shadow-sm"
+              title="Open public news wire in new tab"
             >
-              वार्ता विभाग (Wire ↗)
+              <span>📰</span>
+              <span>तन्त्री-वार्ता (News Wire ↗)</span>
             </a>
             <button
+              type="button"
               onClick={handleTriggerIngest}
               disabled={runningIngest}
-              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-md hover:brightness-110 transition-all disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-amber-500 to-orange-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-md hover:brightness-110 transition-all disabled:opacity-50 cursor-pointer"
             >
               <span>⚙</span>
               <span>{runningIngest ? 'Ingesting...' : 'Run Ingestion'}</span>
             </button>
             <button
-              onClick={fetchPending}
-              className="px-3 py-2 border border-slate-700 hover:border-amber-500/50 text-slate-300 hover:text-amber-300 rounded-md text-xs font-mono transition-colors"
+              type="button"
+              onClick={() => { fetchPending(); fetchArchive(); fetchSources(); }}
+              className="px-3 py-2 border border-slate-700 hover:border-amber-500/50 text-slate-300 hover:text-amber-300 rounded-md text-xs font-mono transition-colors cursor-pointer"
             >
               Refresh
             </button>
             <button
+              type="button"
               onClick={handleLogout}
-              className="px-3 py-2 border border-slate-700 text-slate-300 hover:border-rose-700 hover:text-rose-300 rounded-md text-xs font-mono transition-colors"
+              className="px-3 py-2 border border-slate-700 text-slate-300 hover:border-rose-700 hover:text-rose-300 rounded-md text-xs font-mono transition-colors cursor-pointer"
             >
               Sign out
             </button>
@@ -697,69 +714,77 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
         {/* Tab Navigation */}
         <div className="flex items-center gap-1 overflow-x-auto pb-2 mb-8 border-b border-slate-800/80">
           <button
+            type="button"
             onClick={() => setActiveTab('pending')}
-            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'pending'
-                ? 'border-amber-500 text-amber-300 bg-amber-950/20'
+                ? 'border-amber-500 text-amber-300 bg-amber-950/20 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>स्वीकृति-प्रतीक्षा Pending Approvals</span>
+            <span>📥 स्वीकृति-प्रतीक्षा Pending Approvals</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-amber-500/20 text-amber-400">
               {pendingArticles.length}
             </span>
           </button>
 
           <button
-            onClick={() => setActiveTab('moderation')}
-            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'moderation'
-                ? 'border-amber-500 text-amber-300 bg-amber-950/20'
+            type="button"
+            onClick={() => setActiveTab('archive')}
+            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'archive'
+                ? 'border-amber-500 text-amber-300 bg-amber-950/20 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>⚖️ दण्डनीति Daṇḍanīti (8-Warning & Ban System)</span>
-            {bannedCount > 0 && (
-              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-500/30 text-rose-300">
-                {bannedCount} Banned
-              </span>
-            )}
+            <span>📰 अभिलेखागारम् Published Archive</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-emerald-500/20 text-emerald-300 font-bold">
+              {archiveArticles.length > 0 ? archiveArticles.length : '33+'}
+            </span>
           </button>
 
           <button
-            onClick={() => setActiveTab('daemon')}
-            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'daemon'
-                ? 'border-amber-500 text-amber-300 bg-amber-950/20'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <span>स्वचालित-संवाददूतः Ingest Daemon</span>
-          </button>
-
-          <button
+            type="button"
             onClick={() => setActiveTab('sources')}
-            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
+            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
               activeTab === 'sources'
-                ? 'border-amber-500 text-amber-300 bg-amber-950/20'
+                ? 'border-amber-500 text-amber-300 bg-amber-950/20 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>स्रोत-सञ्चयः Information Sources</span>
+            <span>⚙️ स्रोत-सञ्चयः Information Sources</span>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-slate-800 text-slate-300">
               {sources.length}
             </span>
           </button>
 
           <button
-            onClick={() => setActiveTab('archive')}
-            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap ${
-              activeTab === 'archive'
-                ? 'border-amber-500 text-amber-300 bg-amber-950/20'
+            type="button"
+            onClick={() => setActiveTab('daemon')}
+            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'daemon'
+                ? 'border-amber-500 text-amber-300 bg-amber-950/20 font-bold'
                 : 'border-transparent text-slate-400 hover:text-slate-200'
             }`}
           >
-            <span>अभिलेखागारम् Editorial Archive</span>
+            <span>🤖 स्वचालित-संवाददूतः Ingest Daemon</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('moderation')}
+            className={`px-4 py-2 text-xs font-medium rounded-t-md border-b-2 transition-all flex items-center gap-2 whitespace-nowrap cursor-pointer ${
+              activeTab === 'moderation'
+                ? 'border-amber-500 text-amber-300 bg-amber-950/20 font-bold'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span>⚖️ दण्डनीति Daṇḍanīti (Warnings & Bans)</span>
+            {bannedCount > 0 && (
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] font-mono bg-rose-500/30 text-rose-300">
+                {bannedCount} Banned
+              </span>
+            )}
           </button>
         </div>
 
@@ -1167,16 +1192,47 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
             ) : (
               <div className="grid grid-cols-1 gap-3">
                 {archiveArticles.map(art => (
-                  <div key={art.id} className="bg-[#0B0D13] border border-slate-800/80 rounded-xl p-4 flex justify-between items-center gap-4">
-                    <div>
-                      <h4 className="font-serif font-bold text-sm text-slate-200">{art.title}</h4>
-                      <div className="text-[11px] font-mono text-slate-500 flex gap-2 mt-1">
-                        <span>{art.category}</span>
-                        <span>•</span>
-                        <span>{art.status}</span>
-                        <span>•</span>
-                        <span>{new Date(art.published_at).toLocaleDateString()}</span>
+                  <div key={art.id} className="bg-[#0B0D13] border border-slate-800/80 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="space-y-1.5 flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-serif font-bold text-sm text-slate-100">{art.title}</h4>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold">
+                          {art.category}
+                        </span>
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-semibold">
+                          {art.status}
+                        </span>
                       </div>
+                      {art.title_hi && (
+                        <p className="font-hindi-serif text-xs text-amber-200/90 leading-snug">{art.title_hi}</p>
+                      )}
+                      {art.summary && (
+                        <p className="text-xs text-slate-400 line-clamp-2 max-w-3xl leading-relaxed">{art.summary}</p>
+                      )}
+                      <div className="text-[11px] font-mono text-slate-500 flex gap-2 pt-0.5">
+                        <span>Source: {art.source_name || 'Autonomous Ingest'}</span>
+                        <span>•</span>
+                        <span>{new Date(art.published_at || art.created_at).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <a
+                        href={`/articles/${art.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="px-3 py-1.5 text-xs font-mono rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>वाचनम् (Read)</span>
+                        <span>↗</span>
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => openEditModal(art)}
+                        className="px-3 py-1.5 text-xs font-mono rounded bg-amber-950/40 hover:bg-amber-900/60 text-amber-300 border border-amber-800/40 transition-colors cursor-pointer"
+                      >
+                        संशोधय (Edit)
+                      </button>
                     </div>
                   </div>
                 ))}
