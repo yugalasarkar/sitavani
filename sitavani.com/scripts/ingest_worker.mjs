@@ -162,6 +162,51 @@ async function fetchRssFeed(url) {
   return stdout;
 }
 
+
+async function enrichWithQwen(title, summary) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 35000);
+  try {
+    const prompt = `Title: ${title}
+Summary: ${summary.slice(0, 280)}`;
+    const res = await fetch("http://127.0.0.1:8081/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: "system",
+            content: "You are SITAVANI sovereign news editor. Output strict JSON with keys title_hi and summary_hi in Hindi Devanagari only."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        max_tokens: 90,
+        temperature: 0.1
+      }),
+      signal: controller.signal
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const raw = data?.choices?.[0]?.message?.content?.trim() || "";
+    const match = raw.match(/\{[\s\S]*\}/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      return {
+        titleHi: parsed.title_hi ? sanitizeSovereignTerms(parsed.title_hi.trim()) : null,
+        summaryHi: parsed.summary_hi ? sanitizeSovereignTerms(parsed.summary_hi.trim()) : null
+      };
+    }
+  } catch (err) {
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+  return null;
+}
+
 export async function runIngestion() {
   const runId = randomUUID();
   const startTime = new Date();
@@ -209,10 +254,18 @@ export async function runIngestion() {
           const sanitizedTitle = sanitizeSovereignTerms(item.title);
           const sanitizedSummary = sanitizeSovereignTerms(item.description || item.title);
 
-          const titleEn = sanitizedTitle;
-          const titleHi = sanitizedTitle;
-          const summaryEn = sanitizedSummary.slice(0, 500);
-          const summaryHi = sanitizedSummary.slice(0, 500);
+          let titleEn = sanitizedTitle;
+          let titleHi = sanitizedTitle;
+          let summaryEn = sanitizedSummary.slice(0, 500);
+          let summaryHi = sanitizedSummary.slice(0, 500);
+
+          try {
+            const enriched = await enrichWithQwen(sanitizedTitle, sanitizedSummary);
+            if (enriched) {
+              if (enriched.titleHi) titleHi = enriched.titleHi;
+              if (enriched.summaryHi) summaryHi = enriched.summaryHi;
+            }
+          } catch (_) {}
 
           const articleId = `art-wire-${Date.now()}-${urlHash.slice(0, 6)}`;
           const now = new Date();
