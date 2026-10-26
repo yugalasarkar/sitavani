@@ -11,11 +11,13 @@ interface Props {
 const { language = 'dual', currentPath = '/' } = Astro.props;
 
 const navItems = [
-  { href: '/', label_sa: 'मुखपृष्ठ Mukhapṛṣṭha', label_sub: 'Home' },
-  { href: '/news', label_sa: 'वार्ता Vārtā', label_sub: 'News Wire' },
-  { href: '/?sort=hot', label_sa: 'लोकप्रिय Lokapriya', label_sub: 'Trending' },
-  { href: '/?sort=new', label_sa: 'नवीन Navīna', label_sub: 'Recent' },
-  { href: '/?sort=top', label_sa: 'श्रेष्ठ Śreṣṭha', label_sub: 'Top Accord' },
+  { href: '/', label_sa: 'मुखपृष्ठ Home', label_sub: 'Central Forum' },
+  { href: '/news', label_sa: 'वार्ता News', label_sub: 'Wire' },
+  { href: '/sabhas', label_sa: 'सभाः Sabhas', label_sub: 'Assemblies' },
+  { href: '/leaderboard', label_sa: 'श्रेष्ठ-मण्डलम्', label_sub: 'Leaderboard' },
+  { href: '/search', label_sa: 'अन्वेषणम् Search', label_sub: 'Discovery' },
+  { href: '/?sort=hot', label_sa: 'लोकप्रिय Hot', label_sub: 'Trending' },
+  { href: '/?sort=top', label_sa: 'श्रेष्ठ Top', label_sub: 'Top Accord' },
 ];
 
 const hrefForLang = (lang: string) => {
@@ -26,62 +28,96 @@ const hrefForLang = (lang: string) => {
 ---
 
 <header class="sticky top-0 z-40 bg-[#07080B]/95 backdrop-blur-md border-b border-amber-950/40">
-  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-16 flex flex-wrap items-center justify-between gap-3 py-2">
-    <!-- Brand Logo -->
-    <a href="/" class="flex items-center gap-2.5 text-left group focus-visible:outline-none">
-      <span class="w-3 h-3 rounded-full bg-gradient-to-tr from-amber-400 to-orange-500 animate-pulse shadow-sm shadow-amber-500/50"></span>
-      <div class="flex flex-col">
-        <span class="font-brand text-lg sm:text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500 leading-tight">
-          SITAVANI <span class="text-amber-500/80 font-normal">|</span> सीतावाणी
-        </span>
-        <span class="text-[10px] font-mono tracking-widest text-slate-400 uppercase -mt-0.5">
-          Sovereign Dharmic News & Discourse
-        </span>
-      </div>
-    </a>
+  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+    <!-- Top Row: Brand, Nav, Search, Controls -->
+    <div class="min-h-14 flex items-center justify-between gap-3">
+      <!-- Brand Logo -->
+      <a href="/" class="flex items-center gap-2.5 text-left group focus-visible:outline-none shrink-0">
+        <span class="w-3 h-3 rounded-full bg-gradient-to-tr from-amber-400 to-orange-500 animate-pulse shadow-sm shadow-amber-500/50"></span>
+        <div class="flex flex-col">
+          <span class="font-brand text-lg sm:text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500 leading-tight">
+            SITAVANI <span class="text-amber-500/80 font-normal">|</span> सीतावाणी
+          </span>
+          <span class="text-[10px] font-mono tracking-widest text-slate-400 uppercase -mt-0.5">
+            Sovereign Dharmic News & Discourse
+          </span>
+        </div>
+      </a>
 
-    <!-- Sanskrit Primary Navigation -->
-    <nav aria-label="Sanskrit Navigation" class="hidden lg:flex items-center gap-1 text-xs">
+      <!-- Desktop Primary Navigation -->
+      <nav aria-label="Sanskrit Navigation" class="hidden xl:flex items-center gap-1 text-xs">
+        {navItems.map(item => {
+          const isActive = currentPath === item.href;
+          return (
+            <a
+              href={item.href}
+              class:list={[
+                "px-2.5 py-1.5 rounded-lg transition-all flex flex-col items-center leading-tight group",
+                isActive
+                  ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold"
+                  : "text-slate-400 hover:text-amber-200 hover:bg-slate-900/60"
+              ]}
+            >
+              <span class="text-xs">{item.label_sa}</span>
+            </a>
+          );
+        })}
+      </nav>
+
+      <!-- Center Search Bar (Tablet / Desktop) -->
+      <form method="GET" action="/search" class="hidden md:flex items-center relative max-w-xs lg:max-w-sm w-full">
+        <input
+          type="text"
+          name="q"
+          placeholder="अन्वेषणम् Search..."
+          class="w-full px-3 py-1.5 pl-8 text-xs bg-[#0D1017] border border-amber-950/70 rounded-lg text-slate-200 placeholder-slate-500 focus:outline-none focus:border-amber-500/80 transition-colors font-sans"
+        />
+        <span class="absolute left-2.5 text-slate-500 text-xs">🔍</span>
+      </form>
+
+      <!-- Right Controls: Wallet + Language -->
+      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <!-- Language Switch -->
+        <nav aria-label="Display language" class="flex items-center p-0.5 bg-[#0D1017] border border-slate-800 rounded-md text-[11px] font-medium">
+          {(['en', 'hi', 'dual'] as const).map((option) => (
+            <a
+              href={hrefForLang(option)}
+              class:list={[
+                "px-2 py-1 rounded transition-colors",
+                language === option ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-400 hover:text-slate-200'
+              ]}
+            >
+              {option === 'hi' ? 'हिन्दी' : option === 'en' ? 'EN' : 'Dual'}
+            </a>
+          ))}
+        </nav>
+
+        <!-- Kasturi EVM Pulse -->
+        <KasturiPulse client:load />
+
+        <!-- MetaMask Connect Island -->
+        <WalletNav client:load />
+      </div>
+    </div>
+
+    <!-- Mobile Quick Navigation Bar (Horizontal Scroll on Mobile/Tablet) -->
+    <nav aria-label="Mobile Navigation" class="xl:hidden flex items-center gap-1.5 overflow-x-auto pt-2 pb-1 border-t border-slate-800/60 text-[11px]">
       {navItems.map(item => {
         const isActive = currentPath === item.href;
         return (
           <a
             href={item.href}
             class:list={[
-              "px-3 py-1.5 rounded-lg transition-all flex flex-col items-center leading-tight group",
+              "px-2.5 py-1 rounded-md transition-all whitespace-nowrap shrink-0",
               isActive
-                ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 font-semibold"
-                : "text-slate-400 hover:text-amber-200 hover:bg-slate-900/60"
+                ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 font-semibold"
+                : "text-slate-400 hover:text-slate-200 bg-slate-900/60 border border-slate-800/80"
             ]}
           >
-            <span class="text-xs">{item.label_sa}</span>
+            {item.label_sa}
           </a>
         );
       })}
     </nav>
-
-    <!-- Right Controls: Wallet + Language -->
-    <div class="flex items-center gap-2 sm:gap-3">
-      <!-- Language Switch -->
-      <nav aria-label="Display language" class="flex items-center p-0.5 bg-[#0D1017] border border-slate-800 rounded-md text-[11px] font-medium">
-        {(['en', 'hi', 'dual'] as const).map((option) => (
-          <a
-            href={hrefForLang(option)}
-            class:list={[
-              "px-2 py-1 rounded transition-colors",
-              language === option ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' : 'text-slate-400 hover:text-slate-200'
-            ]}
-          >
-            {option === 'hi' ? 'हिन्दी' : option === 'en' ? 'EN' : 'Dual'}
-          </a>
-        ))}
-      </nav>
-
-      <!-- Kasturi EVM Pulse -->
-      <KasturiPulse client:load />
-
-      <!-- MetaMask Connect Island -->
-      <WalletNav client:load />
-    </div>
   </div>
 </header>

@@ -1035,7 +1035,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
                 <input
                   type="text"
-                  placeholder="Source Name (e.g. DD India)"
+                  placeholder="Source Name (e.g. DD Bharat)"
                   value={newSourceName}
                   onChange={e => setNewSourceName(e.target.value)}
                   className="bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 focus:border-amber-500 focus:outline-none"

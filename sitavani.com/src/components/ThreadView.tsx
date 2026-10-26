@@ -331,6 +331,26 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
     }
   };
 
+  const handleAdminSealPost = async () => {
+    if (!confirm('Seal this dispatch cryptographically with Satya Mudra on Kasturi Chain?')) return;
+    try {
+      const res = await fetch('/api/admin/moderation/seal', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ postId: post.id })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setPost(prev => ({ ...prev, chain_tx_hash: data.chain_tx_hash }));
+        showToast('Dispatch successfully sealed with Satya Mudra on Kasturi Chain!');
+      } else {
+        alert(data.error || 'Failed to seal dispatch.');
+      }
+    } catch (err: any) {
+      alert(err.message || 'Could not seal dispatch.');
+    }
+  };
+
   const renderComment = (c: Comment, depth = 0) => {
     const isCommentAdmin = c.author_address.toLowerCase() === '0xd22913b647d905d931e4dbbc36b2eecabb78329b';
     const isReplying = replyingToId === c.id;
@@ -704,6 +724,16 @@ export const ThreadView: React.FC<ThreadViewProps> = ({ post: initialPost, initi
               >
                 🗑️ Delete Post
               </button>
+              {!post.chain_tx_hash && (
+                <button
+                  onClick={handleAdminSealPost}
+                  className="px-2.5 py-1 rounded bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 transition-colors flex items-center gap-1"
+                  title="Anchor dispatch cryptographically onto Kasturi Chain EVM"
+                >
+                  <span>⬡</span>
+                  <span>अङ्कनम् Seal On-Chain</span>
+                </button>
+              )}
             </div>
           )}
         </div>
