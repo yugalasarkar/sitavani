@@ -85,6 +85,12 @@ export async function toggleSource(id: number) {
   return { success: true, source };
 }
 
+export async function deleteSource(id: number) {
+  const ok = await newsRepository.deleteSource(id);
+  if (!ok) return { error: 'Source not found', status: 404 as const };
+  return { success: true, id };
+}
+
 export async function getKeywords() {
   return { keywords: await newsRepository.listKeywords() };
 }

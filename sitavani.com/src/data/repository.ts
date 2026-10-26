@@ -38,6 +38,7 @@ export interface NewsRepository {
   listSources(): Promise<Source[]>;
   insertSource(source: Omit<Source, 'id' | 'created_at' | 'articles_count'>): Promise<Source | undefined>;
   toggleSource(id: number): Promise<Source | undefined>;
+  deleteSource(id: number): Promise<boolean>;
   listLogs(): Promise<DaemonLog[]>;
   appendLog(log: Omit<DaemonLog, 'id' | 'timestamp'>): Promise<void>;
   listKeywords(): Promise<string[]>;
@@ -416,6 +417,11 @@ export class PostgresNewsRepository implements NewsRepository {
       );
       return source;
     });
+  }
+
+  async deleteSource(id: number): Promise<boolean> {
+    const res = await this.query('DELETE FROM sources WHERE id = $1', [id]);
+    return res.rowCount !== null && res.rowCount > 0;
   }
 
   async listLogs() {
