@@ -157,20 +157,19 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     try {
       // 1. Get challenge nonce
       const nonceRes = await fetch(`/api/auth/nonce?address=${encodeURIComponent(walletAddress)}`);
-      const nonceData = await nonceRes.json();
+      const nonceData = await nonceRes.json().catch(() => ({}));
       if (!nonceRes.ok || !nonceData.nonce) {
         throw new Error(nonceData.error || 'Failed to generate authentication challenge.');
       }
 
       const nonce = nonceData.nonce;
-      const challengeMessage = [
+      const challengeMessage = nonceData.message || [
         'SITAVANI Sovereign Network Authentication',
         'Sign-In with Kasturi Chain / Ethereum Wallet',
         '',
         `Address: ${walletAddress.toLowerCase()}`,
         `Chain ID: ${KASTURI_CHAIN_ID}`,
         `Nonce: ${nonce}`,
-        `Issued At: ${new Date().toISOString()}`,
         '',
         'Notice: Signing this message verifies ownership of your wallet without gas fees or state mutation.'
       ].join('\n');

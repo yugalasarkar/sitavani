@@ -36,10 +36,9 @@ export function generateAuthChallenge(address: string, nonce: string): string {
     `Address: ${address.toLowerCase()}`,
     `Chain ID: ${KASTURI_CHAIN_ID}`,
     `Nonce: ${nonce}`,
-    `Issued At: ${new Date().toISOString()}`,
     '',
     'Notice: Signing this message verifies ownership of your wallet without gas fees or state mutation.'
-  ].join('\n');
+  ].join("\n");
 }
 
 export async function verifyWalletSignature(
