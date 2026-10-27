@@ -66,7 +66,7 @@ export function createUserSessionCookie(address: string, role: string): string {
   const payload = `${normalized}:${role}:${expiry}`;
   const sig = signValue(payload, secret);
   const cookieValue = `${payload}:${sig}`;
-  return `${COOKIE_USER}=${cookieValue}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${USER_SESSION_TTL}${secureFlag()}`;
+  return `${COOKIE_USER}=${cookieValue}; Path=/; Domain=.sitavani.com; HttpOnly; SameSite=Lax; Max-Age=${USER_SESSION_TTL}${secureFlag()}`;
 }
 
 export function createAdminSessionCookie(address: string): string {
@@ -80,7 +80,7 @@ export function createAdminSessionCookie(address: string): string {
 }
 
 export function clearUserSessionCookie(): string {
-  return `${COOKIE_USER}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT${secureFlag()}`;
+  return `${COOKIE_USER}=; Path=/; Domain=.sitavani.com; HttpOnly; SameSite=Lax; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT${secureFlag()}`;
 }
 
 export function clearAdminSessionCookie(): string {

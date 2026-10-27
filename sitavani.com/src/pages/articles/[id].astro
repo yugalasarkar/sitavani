@@ -70,7 +70,7 @@ const theme = article ? (CATEGORY_THEMES[article.category] || CATEGORY_THEMES['G
 const totalWords = article ? (article.content_raw || article.summary).split(/\s+/).length : 0;
 const readingMinutes = Math.max(1, Math.ceil(totalWords / 160));
 
-const discussUrl = article ? `/s/${mappedSabha.slug}?new_post=1&title=${encodeURIComponent(article.title)}&content=${encodeURIComponent(article.summary)}&ref_url=${encodeURIComponent(canonicalUrl)}&sabha=${mappedSabha.slug}` : '/';
+const discussUrl = article ? `https://akhand.sitavani.com/s/${mappedSabha.slug}?new_post=1&title=${encodeURIComponent(article.title)}&content=${encodeURIComponent(article.summary)}&ref_url=${encodeURIComponent(canonicalUrl)}&sabha=${mappedSabha.slug}` : '/';
 ---
 
 <Layout

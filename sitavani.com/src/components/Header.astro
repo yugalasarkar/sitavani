@@ -6,19 +6,34 @@ import type { DisplayLanguage } from '../types';
 interface Props {
   language?: DisplayLanguage;
   currentPath?: string;
+  isCommunityView?: boolean;
 }
 
-const { language = 'dual', currentPath = '/' } = Astro.props;
+const { language = 'dual', currentPath = '/', isCommunityView = false } = Astro.props;
 
-const navItems = [
-  { href: '/', label_sa: 'मुखपृष्ठ Home', label_sub: 'Central Forum' },
-  { href: '/news', label_sa: 'वार्ता News', label_sub: 'Wire' },
+const host = Astro.request.headers.get('host') || '';
+const isAkhand = isCommunityView || host.startsWith('akhand.') || currentPath === '/community';
+
+const newsNavItems = [
+  { href: '/', label_sa: 'वार्ता Wire', label_sub: 'All Wire' },
+  { href: '/?category=DEFENSE', label_sa: 'रक्षा Defense', label_sub: 'Strategic' },
+  { href: '/?category=SCIENCE', label_sa: 'विज्ञान Science', label_sub: 'Space & Tech' },
+  { href: '/?category=HERITAGE', label_sa: 'इतिहास Heritage', label_sub: 'Epigraphy' },
+  { href: '/?category=MANDIR', label_sa: 'स्थापत्य Mandir', label_sub: 'Sacred Sites' },
+  { href: '/#facts', label_sa: 'सत्य-शोधन Fact-Shield', label_sub: 'Verified Facts' },
+  { href: '/search', label_sa: 'अन्वेषणम् Search', label_sub: 'Discovery' },
+];
+
+const socialNavItems = [
+  { href: '/', label_sa: 'संसद् Feed', label_sub: 'Community' },
   { href: '/sabhas', label_sa: 'सभाः Sabhas', label_sub: 'Assemblies' },
   { href: '/leaderboard', label_sa: 'श्रेष्ठ-मण्डलम्', label_sub: 'Leaderboard' },
-  { href: '/search', label_sa: 'अन्वेषणम् Search', label_sub: 'Discovery' },
   { href: '/?sort=hot', label_sa: 'लोकप्रिय Hot', label_sub: 'Trending' },
   { href: '/?sort=top', label_sa: 'श्रेष्ठ Top', label_sub: 'Top Accord' },
+  { href: '/search', label_sa: 'अन्वेषणम् Search', label_sub: 'Discovery' },
 ];
+
+const navItems = isAkhand ? socialNavItems : newsNavItems;
 
 const hrefForLang = (lang: string) => {
   const url = new URL(Astro.request.url);
@@ -33,13 +48,13 @@ const hrefForLang = (lang: string) => {
     <div class="min-h-14 flex items-center justify-between gap-3">
       <!-- Brand Logo -->
       <a href="/" class="flex items-center gap-2.5 text-left group focus-visible:outline-none shrink-0">
-        <span class="w-3 h-3 rounded-full bg-gradient-to-tr from-amber-400 to-orange-500 animate-pulse shadow-sm shadow-amber-500/50"></span>
+        <span class={`w-3.5 h-3.5 rounded-full ${isAkhand ? 'bg-gradient-to-tr from-amber-400 via-orange-500 to-rose-500' : 'bg-gradient-to-tr from-amber-400 to-orange-500'} animate-pulse shadow-sm shadow-amber-500/50`}></span>
         <div class="flex flex-col">
           <span class="font-brand text-lg sm:text-xl font-bold tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-amber-400 to-orange-500 leading-tight">
-            SITAVANI <span class="text-amber-500/80 font-normal">|</span> सीतावाणी
+            {isAkhand ? 'AKHAND SITAVANI' : 'SITAVANI'} <span class="text-amber-500/80 font-normal">|</span> {isAkhand ? 'अखण्ड सीतावाणी' : 'सीतावाणी'}
           </span>
           <span class="text-[10px] font-mono tracking-widest text-slate-400 uppercase -mt-0.5">
-            Sovereign Dharmic News & Discourse
+            {isAkhand ? 'Sovereign Community Assemblies & Dialectic Forum' : 'Sovereign Attributed News Wire & Intelligence'}
           </span>
         </div>
       </a>
@@ -75,8 +90,29 @@ const hrefForLang = (lang: string) => {
         <span class="absolute left-2.5 text-slate-500 text-xs">🔍</span>
       </form>
 
-      <!-- Right Controls: Wallet + Language -->
+      <!-- Right Controls: Portal Cross-Link + Wallet + Language -->
       <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <!-- Cross-Portal Portal Button -->
+        {isAkhand ? (
+          <a
+            href="https://sitavani.com/"
+            class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-mono transition-colors"
+            title="Switch to Sovereign News Wire"
+          >
+            <span>📰</span>
+            <span class="font-bold">News Wire ↗</span>
+          </a>
+        ) : (
+          <a
+            href="https://akhand.sitavani.com/"
+            class="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-amber-600/20 to-orange-600/20 hover:from-amber-600/30 hover:to-orange-600/30 border border-amber-500/40 text-amber-300 text-xs font-mono transition-colors shadow-sm"
+            title="Switch to Akhand Sovereign Community"
+          >
+            <span>🏛️</span>
+            <span class="font-bold">Akhand Social ↗</span>
+          </a>
+        )}
+
         <!-- Language Switch -->
         <nav aria-label="Display language" class="flex items-center p-0.5 bg-[#0D1017] border border-slate-800 rounded-md text-[11px] font-medium">
           {(['en', 'hi', 'dual'] as const).map((option) => (
@@ -118,6 +154,23 @@ const hrefForLang = (lang: string) => {
           </a>
         );
       })}
+
+      <!-- Mobile Cross-Portal Link -->
+      {isAkhand ? (
+        <a
+          href="https://sitavani.com/"
+          class="px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[11px] font-mono"
+        >
+          📰 News Wire ↗
+        </a>
+      ) : (
+        <a
+          href="https://akhand.sitavani.com/"
+          class="px-2.5 py-1 rounded-md whitespace-nowrap shrink-0 bg-amber-500/10 text-amber-300 border border-amber-500/30 text-[11px] font-mono"
+        >
+          🏛️ Akhand Social ↗
+        </a>
+      )}
     </nav>
   </div>
 </header>

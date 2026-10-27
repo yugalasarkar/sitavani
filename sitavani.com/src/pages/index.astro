@@ -2,155 +2,329 @@
 import Layout from '../layouts/Layout.astro';
 import Header from '../components/Header.astro';
 import Footer from '../components/Footer.astro';
+import BharatShaktiPulse from '../components/BharatShaktiPulse.astro';
+import DailyVedicInsight from '../components/DailyVedicInsight.astro';
+import LeadHeroStory from '../components/LeadHeroStory.astro';
+import FeaturedGrid from '../components/FeaturedGrid.astro';
+import BharatRenaissanceMap from '../components/BharatRenaissanceMap.astro';
+import FactVsMythDesk from '../components/FactVsMythDesk.astro';
+import { DispatchWireIsland } from '../components/DispatchWireIsland';
 import { SocialFeed } from '../components/SocialFeed';
+import { getFeed, getStats } from '../data/store';
 import { socialRepository } from '../data/socialRepository';
 import { parseUserSession } from '../lib/walletAuth';
-import type { DisplayLanguage } from '../types';
+import type { DisplayLanguage, NewsCategory } from '../types';
 
+export const prerender = false;
+
+const host = Astro.request.headers.get('host') || '';
 const url = new URL(Astro.request.url);
-const sabha = url.searchParams.get('sabha') || 'all';
-const sort = (url.searchParams.get('sort') || 'hot') as 'hot' | 'new' | 'top';
-const search = url.searchParams.get('search') || undefined;
+const isAkhand = host.startsWith('akhand.') || url.searchParams.get('mode') === 'social';
+
 const requestedLanguage = url.searchParams.get('lang');
 const language: DisplayLanguage = requestedLanguage === 'en' || requestedLanguage === 'hi' || requestedLanguage === 'dual'
   ? requestedLanguage
   : 'dual';
 
-const userSession = parseUserSession(Astro.request);
-const [sabhas, { posts, total }] = await Promise.all([
-  socialRepository.getSabhas(),
-  socialRepository.listPosts({
-    sabha: sabha === 'all' ? undefined : sabha,
-    sort,
-    search,
-    limit: 30,
-    viewerAddress: userSession?.address
-  })
+// IF AKHAND: Load Social Assembly Data
+let sabhas: any[] = [];
+let posts: any[] = [];
+let userSession: any = null;
+
+// IF SITAVANI: Load Sourced News Wire Data
+let feedData: Awaited<ReturnType<typeof getFeed>> | undefined;
+let stats: Awaited<ReturnType<typeof getStats>> | undefined;
+let databaseUnavailable = false;
+
+const validCategories = new Set<NewsCategory>([
+  'HERITAGE', 'MANDIR', 'DEFENSE', 'SCIENCE', 'SANSKRIT', 'GOVERNANCE', 'NARRATIVE_FACTS', 'GENERAL'
 ]);
+const requestedCategory = url.searchParams.get('category') || 'ALL';
+const selectedCategory: NewsCategory | 'ALL' = requestedCategory === 'ALL' || validCategories.has(requestedCategory as NewsCategory)
+  ? requestedCategory as NewsCategory | 'ALL'
+  : 'ALL';
+const searchQuery = (url.searchParams.get('search') || '').slice(0, 200);
+
+if (isAkhand) {
+  const sabhaParam = url.searchParams.get('sabha') || 'all';
+  const sortParam = (url.searchParams.get('sort') || 'hot') as 'hot' | 'new' | 'top';
+  userSession = parseUserSession(Astro.request);
+  try {
+    const [sList, postRes] = await Promise.all([
+      socialRepository.getSabhas(),
+      socialRepository.listPosts({
+        sabha: sabhaParam === 'all' ? undefined : sabhaParam,
+        sort: sortParam,
+        search: searchQuery || undefined,
+        limit: 30,
+        viewerAddress: userSession?.address
+      })
+    ]);
+    sabhas = sList;
+    posts = postRes.posts;
+  } catch (e) {
+    console.error('Akhand feed error:', e);
+    databaseUnavailable = true;
+  }
+} else {
+  try {
+    [feedData, stats] = await Promise.all([
+      getFeed(selectedCategory, searchQuery, 100),
+      getStats()
+    ]);
+  } catch (e) {
+    console.error('Wire feed error:', e);
+    Astro.response.status = 503;
+    databaseUnavailable = true;
+  }
+}
+
+const dispatches = feedData?.articles || [];
+const heroDispatch = dispatches.find((article) => article.salience === 'LEAD') || dispatches[0];
+const featuredDispatches = dispatches.filter((article) => article.id !== heroDispatch?.id && article.salience === 'FEATURE').slice(0, 4);
+const wireDispatches = dispatches.filter((article) => article.id !== heroDispatch?.id && !featuredDispatches.some(({ id }) => id === article.id));
+const excludedArticleIds = [heroDispatch?.id, ...featuredDispatches.map((article) => article.id)].filter((id): id is string => Boolean(id));
 ---
 
 <Layout 
-  title="SITAVANI | सीतावाणी — Sovereign Dharmic Discourse & Verified Dispatches" 
-  description="Sovereign Sanatana social forum, news archive, and decentralized discourse network anchored to Kasturi Chain."
+  title={isAkhand 
+    ? "AKHAND SITAVANI | अखण्ड सीतावाणी — Sovereign Community Assemblies & Dialectic Forum"
+    : "SITAVANI | सीतावाणी — Sovereign Attributed News Wire & Civilizational Intelligence"} 
+  description={isAkhand
+    ? "Decentralized sovereign Sanatana social forum, knowledge Sabhas, and peer discourse network anchored to Kasturi Chain."
+    : "Source-verified journalistic dispatches, primary archaeological records, defense analysis, and dharmic commentary."}
 >
   <div class="min-h-screen flex flex-col bg-[#07090E] text-slate-100 font-sans">
-    <Header language={language} currentPath="/" />
+    <Header language={language} currentPath="/" isCommunityView={isAkhand} />
 
-    <main class="flex-grow container mx-auto px-4 py-8 max-w-7xl">
-      <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
-        <!-- Left/Center Feed Column (8 cols) -->
-        <div class="lg:col-span-8 space-y-6">
-          <SocialFeed
-            client:load
-            initialPosts={posts}
-            sabhas={sabhas}
-            currentSabha={sabha}
-            currentSort={sort}
-            language={language}
-          />
-        </div>
-
-        <!-- Right Sovereign Sidebar (4 cols) -->
-        <aside class="lg:col-span-4 space-y-6 sticky top-20">
-          
-          <!-- Kasturi EVM Network Status Card -->
-          <div className="rounded-xl border border-amber-900/40 bg-[#0A0C12] p-5 space-y-4 shadow-xl">
-            <div class="flex items-center justify-between border-b border-amber-950/40 pb-3">
-              <div class="flex items-center gap-2">
-                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                <h3 class="font-serif font-bold text-sm text-slate-100">
-                  कस्तूरी Kasturi EVM Chain
-                </h3>
+    {isAkhand ? (
+      /* ========================================================================= */
+      /* AKHAND SUBDOMAIN VIEW: SOVEREIGN COMMUNITY ASSEMBLY & SOCIAL FORUM       */
+      /* ========================================================================= */
+      <div class="flex-grow">
+        <!-- Akhand Header Banner -->
+        <div class="bg-gradient-to-r from-amber-950/40 via-[#0C0F17] to-amber-950/20 border-b border-amber-900/30">
+          <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500/20 to-orange-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 font-bold font-serif text-base shadow-sm">
+                अ
               </div>
-              <span class="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
-                Operational
-              </span>
-            </div>
-
-            <div class="space-y-2.5 text-xs font-mono">
-              <div class="flex justify-between py-1 border-b border-slate-900">
-                <span class="text-slate-400">Chain ID</span>
-                <span class="text-amber-300 font-bold">108108 (0x1a64c)</span>
-              </div>
-              <div class="flex justify-between py-1 border-b border-slate-900">
-                <span class="text-slate-400">RPC Endpoint</span>
-                <a href="/rpc" target="_blank" class="text-amber-400 hover:underline">/rpc (SSL)</a>
-              </div>
-              <div class="flex justify-between py-1 border-b border-slate-900">
-                <span class="text-slate-400">Consensus</span>
-                <span class="text-slate-300">Proof of Contribution (PoC)</span>
-              </div>
-              <div class="flex justify-between py-1">
-                <span class="text-slate-400">VM Engine</span>
-                <span class="text-slate-300">evmone C++ Native</span>
+              <div>
+                <h1 class="text-sm sm:text-base font-bold text-slate-100 font-serif">
+                  अखण्ड संसद् <span class="text-amber-400 font-mono text-xs font-normal">| Akhand Sovereign Community Assembly</span>
+                </h1>
+                <p class="text-[11px] text-slate-400">
+                  Decentralized civilizational discourse, peer research, and dialectic inquiries across 11 Knowledge Sabhas.
+                </p>
               </div>
             </div>
 
-            <div class="pt-2">
-              <a 
-                href="/news"
-                class="block text-center py-2 text-xs font-semibold rounded-lg bg-[#121722] hover:bg-amber-500/10 text-amber-300 border border-amber-900/40 hover:border-amber-500/40 transition-all"
+            <div class="flex items-center gap-2">
+              <a
+                href="https://sitavani.com/"
+                class="px-3.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-xs font-mono font-bold text-amber-300 flex items-center gap-1.5 transition-colors"
               >
-                वार्ता वृत्तान्तः Explore Verified News Wire →
+                <span>📰</span>
+                <span>सीतावाणी वार्तापटल (Sitavani News Wire ↗)</span>
               </a>
             </div>
           </div>
+        </div>
 
-          <!-- Sabhas / Mandalas Directory -->
-          <div class="rounded-xl border border-amber-900/40 bg-[#0A0C12] p-5 space-y-3 shadow-xl">
-            <h3 class="font-serif font-bold text-sm text-slate-100 flex items-center gap-2">
-              <span>मण्डल तालिका Sabhas Directory</span>
-            </h3>
-            <p class="text-xs text-slate-400 leading-relaxed">
-              Curated assemblies of classical knowledge, sovereign defense, science and dialectics.
-            </p>
+        <main class="container mx-auto px-4 py-8 max-w-7xl">
+          <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+            
+            <!-- Left/Center Feed Column (8 cols) -->
+            <div class="lg:col-span-8 space-y-6">
+              <SocialFeed
+                client:load
+                initialPosts={posts}
+                sabhas={sabhas}
+                currentSabha={url.searchParams.get('sabha') || 'all'}
+                currentSort={(url.searchParams.get('sort') || 'hot') as 'hot' | 'new' | 'top'}
+                language={language}
+              />
+            </div>
 
-            <div class="space-y-1.5 pt-2 max-h-72 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-amber-950">
-              {sabhas.map(s => (
-                <a
-                  href={`/s/${s.slug}`}
-                  class="flex items-center justify-between p-2 rounded-lg hover:bg-[#121722] transition-colors border border-transparent hover:border-amber-950/40 text-xs"
-                >
-                  <div class="flex flex-col">
-                    <span class="font-semibold text-slate-200">{s.name_sa}</span>
-                    <span class="text-[10px] text-slate-400">{s.name_en}</span>
+            <!-- Right Sovereign Sidebar (4 cols) -->
+            <aside class="lg:col-span-4 space-y-6 sticky top-20">
+              
+              <!-- Kasturi EVM Network Status Card -->
+              <div class="rounded-xl border border-amber-900/40 bg-[#0A0C12] p-5 space-y-4 shadow-xl">
+                <div class="flex items-center justify-between border-b border-amber-950/40 pb-3">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    <h3 class="font-serif font-bold text-sm text-slate-100">
+                      कस्तूरी Kasturi EVM Chain
+                    </h3>
                   </div>
-                  {s.is_official && (
-                    <span class="px-1.5 py-0.5 text-[9px] uppercase font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      Official
-                    </span>
-                  )}
-                </a>
-              ))}
+                  <span class="px-2 py-0.5 text-[10px] font-mono font-bold rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/30">
+                    Operational
+                  </span>
+                </div>
+
+                <div class="space-y-2.5 text-xs font-mono">
+                  <div class="flex justify-between py-1 border-b border-slate-900">
+                    <span class="text-slate-400">Chain ID</span>
+                    <span class="text-amber-300 font-bold">108108 (0x1a64c)</span>
+                  </div>
+                  <div class="flex justify-between py-1 border-b border-slate-900">
+                    <span class="text-slate-400">RPC Protocol</span>
+                    <span class="text-amber-400">https://sitavani.com/rpc</span>
+                  </div>
+                  <div class="flex justify-between py-1 border-b border-slate-900">
+                    <span class="text-slate-400">Consensus</span>
+                    <span class="text-slate-300">Proof of Contribution (PoC)</span>
+                  </div>
+                  <div class="flex justify-between py-1">
+                    <span class="text-slate-400">Native Coin</span>
+                    <span class="text-amber-300 font-bold">NILA (नीला)</span>
+                  </div>
+                </div>
+
+                <div class="pt-2">
+                  <a 
+                    href="https://sitavani.com/"
+                    class="block text-center py-2 text-xs font-semibold rounded-lg bg-[#121722] hover:bg-amber-500/10 text-amber-300 border border-amber-900/40 hover:border-amber-500/40 transition-all"
+                  >
+                    📰 Explore Official Sourced News Wire ↗
+                  </a>
+                </div>
+              </div>
+
+              <!-- Sabhas / Mandalas Directory -->
+              <div class="rounded-xl border border-amber-900/40 bg-[#0A0C12] p-5 space-y-3 shadow-xl">
+                <h3 class="font-serif font-bold text-sm text-slate-100 flex items-center gap-2">
+                  <span>मण्डल तालिका Sabhas Directory</span>
+                </h3>
+                <p class="text-xs text-slate-400 leading-relaxed">
+                  Curated assemblies of classical knowledge, sovereign defense, science and dialectics.
+                </p>
+
+                <div class="space-y-1.5 pt-2 max-h-72 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-amber-950">
+                  {sabhas.map(s => (
+                    <a
+                      href={`/s/${s.slug}`}
+                      class="flex items-center justify-between p-2 rounded-lg hover:bg-[#121722] transition-colors border border-transparent hover:border-amber-950/40 text-xs"
+                    >
+                      <div class="flex flex-col">
+                        <span class="font-semibold text-slate-200">{s.name_sa}</span>
+                        <span class="text-[10px] text-slate-400">{s.name_en}</span>
+                      </div>
+                      {s.is_official && (
+                        <span class="px-1.5 py-0.5 text-[9px] uppercase font-bold rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                          Official
+                        </span>
+                      )}
+                    </a>
+                  ))}
+                </div>
+              </div>
+
+              <!-- Dharmic Code of Conduct -->
+              <div class="rounded-xl border border-amber-900/40 bg-[#0A0C12] p-5 space-y-3 text-xs text-slate-400">
+                <h3 class="font-serif font-bold text-sm text-slate-100">
+                  मर्यादा Dharmic Code of Conduct
+                </h3>
+                <ul class="space-y-2 leading-relaxed">
+                  <li class="flex items-start gap-2">
+                    <span class="text-amber-400 font-bold font-mono">१.</span>
+                    <span><strong>सत्यम् Satya:</strong> Always cite primary archaeological, epigraphic or textual sources.</span>
+                  </li>
+                  <li class="flex items-start gap-2">
+                    <span class="text-amber-400 font-bold font-mono">२.</span>
+                    <span><strong>न्यायः Nyāya:</strong> Engage in constructive philosophical debate (Vāda), avoiding destructive vitriol (Vitaṇḍā).</span>
+                  </li>
+                  <li class="flex items-start gap-2">
+                    <span class="text-amber-400 font-bold font-mono">३.</span>
+                    <span><strong>अस्तेयम् Asteya:</strong> Preserve authorship integrity. Plagiarism results in severe karma deduction.</span>
+                  </li>
+                </ul>
+              </div>
+
+            </aside>
+
+          </div>
+        </main>
+      </div>
+    ) : (
+      /* ========================================================================= */
+      /* MAIN SITAVANI VIEW: SOVEREIGN ATTRIBUTED NEWS WIRE & INTELLIGENCE AGENCY  */
+      /* ========================================================================= */
+      <div class="flex-grow">
+        <!-- Wire Header Banner with Portal to Akhand Social Subdomain -->
+        <div class="bg-gradient-to-r from-amber-950/40 via-[#0C0F17] to-amber-950/20 border-b border-amber-900/30">
+          <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3.5 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-lg font-serif">
+                वा
+              </div>
+              <div>
+                <h1 class="text-base sm:text-lg font-bold text-slate-100 font-serif tracking-wide">
+                  वार्ता विभाग <span class="text-amber-400 font-mono text-xs sm:text-sm font-normal">| Vārtā Vibhāga (Official Sovereign Wire)</span>
+                </h1>
+                <p class="text-xs text-slate-400">
+                  Direct, source-attributed reporting from primary archives, state-level corridors, and official defense/space authorities.
+                </p>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <a
+                href="https://akhand.sitavani.com/"
+                class="px-3.5 py-1.5 rounded-lg bg-gradient-to-r from-amber-600/20 to-orange-600/20 hover:from-amber-600/30 hover:to-orange-600/30 border border-amber-500/40 text-xs font-mono font-bold text-amber-300 flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/10"
+              >
+                <span>🏛️</span>
+                <span>अखण्ड संसद् Akhand Social Community ↗</span>
+              </a>
             </div>
           </div>
+        </div>
 
-          <!-- Dharmic Code of Conduct -->
-          <div class="rounded-xl border border-amber-900/40 bg-[#0A0C12] p-5 space-y-3 text-xs text-slate-400">
-            <h3 class="font-serif font-bold text-sm text-slate-100">
-              मर्यादा Dharmic Code of Conduct
-            </h3>
-            <ul class="space-y-2 leading-relaxed">
-              <li class="flex items-start gap-2">
-                <span class="text-amber-400 font-bold font-mono">१.</span>
-                <span><strong>सत्यम् Satya:</strong> Always cite primary archaeological, epigraphic or textual sources.</span>
-              </li>
-              <li class="flex items-start gap-2">
-                <span class="text-amber-400 font-bold font-mono">२.</span>
-                <span><strong>न्यायः Nyāya:</strong> Engage in constructive philosophical debate (Vāda), avoiding destructive vitriol (Vitaṇḍā).</span>
-              </li>
-              <li class="flex items-start gap-2">
-                <span class="text-amber-400 font-bold font-mono">३.</span>
-                <span><strong>अस्तेयम् Asteya:</strong> Preserve authorship integrity. Plagiarism results in severe karma deduction.</span>
-              </li>
-            </ul>
-          </div>
+        <main class="container mx-auto px-4 py-8 space-y-12 max-w-7xl">
+          {databaseUnavailable ? (
+            <section class="min-h-72 rounded-xl border border-amber-900/30 bg-[#0A0C12] p-8 flex flex-col justify-center">
+              <p class="font-mono text-xs uppercase tracking-widest text-amber-400">SITAVANI · Editorial archive</p>
+              <h1 class="mt-3 text-3xl sm:text-4xl font-serif font-bold text-slate-100">The archive is temporarily unavailable</h1>
+              <p class="mt-3 max-w-2xl text-sm text-slate-400">The editorial database could not be reached. Please try again shortly.</p>
+            </section>
+          ) : (
+          <>
+            <BharatShaktiPulse stats={stats!} language={language} />
 
-        </aside>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div class="lg:col-span-2">
+                {heroDispatch ? <LeadHeroStory article={heroDispatch} language={language} /> : (
+                  <section class="min-h-72 rounded-xl border border-amber-900/30 bg-[#0A0C12] p-8 flex flex-col justify-center">
+                    <p class="font-mono text-xs uppercase tracking-widest text-amber-400">SITAVANI · Editorial wire</p>
+                    <h1 class="mt-3 text-3xl sm:text-4xl font-serif font-bold text-slate-100">Published dispatches</h1>
+                    <p class="mt-3 max-w-2xl text-sm text-slate-400">{dispatches.length === 0 && (selectedCategory !== 'ALL' || searchQuery) ? 'No published dispatches match these filters.' : 'There are no published articles yet. New reporting will appear here after source review and explicit editorial publication.'}</p>
+                  </section>
+                )}
+              </div>
+              <div class="space-y-6"><DailyVedicInsight language={language} /></div>
+            </div>
 
+            {featuredDispatches.length > 0 && <FeaturedGrid articles={featuredDispatches} language={language} />}
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+              <div class="lg:col-span-2"><BharatRenaissanceMap language={language} /></div>
+              <div><FactVsMythDesk language={language} /></div>
+            </div>
+
+            <DispatchWireIsland
+              client:load
+              articles={wireDispatches}
+              selectedCategory={selectedCategory}
+              searchQuery={searchQuery}
+              excludedArticleIds={excludedArticleIds}
+              language={language}
+            />
+          </>
+          )}
+        </main>
       </div>
-    </main>
+    )}
 
     <Footer language={language} />
   </div>
