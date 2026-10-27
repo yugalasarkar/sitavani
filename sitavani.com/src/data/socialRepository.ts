@@ -199,6 +199,65 @@ export class SocialRepository {
     };
   }
 
+  async getPostsForArticle(articleId: string, originalUrl?: string, limit: number = 5): Promise<Post[]> {
+    const canonical = `https://sitavani.com/articles/${articleId}`;
+    const query = `
+      SELECT 
+        p.id, p.sabha_slug, p.author_address, p.title, p.content, p.media_url, 
+        p.media_type, p.original_url, p.is_pinned, p.is_official_dispatch, 
+        p.upvotes, p.downvotes, p.score, p.comments_count, p.chain_tx_hash, p.created_at,
+        p.is_deleted, p.deleted_reason, p.is_misinformation, p.admin_warning_note,
+        u.display_name as author_name, u.role as author_role, u.is_verified_authority as author_is_verified,
+        u.warnings_count as author_warnings, u.is_banned as author_is_banned,
+        0::numeric as tips_total,
+        0::int as tips_count,
+        NULL::int as user_vote
+      FROM posts p
+      JOIN users u ON u.wallet_address = p.author_address
+      WHERE (p.is_deleted IS FALSE OR p.is_deleted IS NULL)
+        AND (p.original_url = $1 OR p.original_url = $2 OR p.content LIKE $3 OR p.title ILIKE $4)
+      ORDER BY p.score DESC, p.created_at DESC
+      LIMIT $5
+    `;
+    const res = await this.pool.query(query, [
+      canonical,
+      originalUrl || canonical,
+      `%${articleId}%`,
+      `%${articleId}%`,
+      limit
+    ]);
+    return res.rows.map(r => ({
+      id: r.id,
+      sabha_slug: r.sabha_slug,
+      author_address: r.author_address,
+      author_name: r.author_name || r.author_address.slice(0, 8),
+      author_role: r.author_role,
+      author_is_verified: r.author_is_verified,
+      author_warnings: r.author_warnings || 0,
+      author_is_banned: r.author_is_banned || false,
+      title: r.title,
+      content: r.content,
+      media_url: r.media_url,
+      media_type: r.media_type,
+      original_url: r.original_url,
+      is_pinned: r.is_pinned,
+      is_official_dispatch: r.is_official_dispatch,
+      upvotes: r.upvotes,
+      downvotes: r.downvotes,
+      score: r.score,
+      comments_count: r.comments_count,
+      chain_tx_hash: r.chain_tx_hash,
+      is_deleted: r.is_deleted,
+      deleted_reason: r.deleted_reason,
+      is_misinformation: r.is_misinformation,
+      admin_warning_note: r.admin_warning_note,
+      tips_total: 0,
+      tips_count: 0,
+      user_vote: undefined,
+      created_at: r.created_at
+    }));
+  }
+
   async createPost(data: {
     sabha_slug: string;
     author_address: string;

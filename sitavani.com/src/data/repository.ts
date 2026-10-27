@@ -30,6 +30,7 @@ export type NewArticle = Omit<Article, 'status' | 'created_at' | 'reviewed_at' |
 export interface NewsRepository {
   listPublishedArticles(query: FeedQuery): Promise<{ articles: Article[]; total: number; offset: number; limit: number }>;
   findPublishedArticle(id: string): Promise<Article | undefined>;
+  findRelatedArticles(category: NewsCategory, currentId: string, limit?: number): Promise<Article[]>;
   getStats(): Promise<FeedStats>;
   listArticles(status?: ArticleStatus, category?: NewsCategory): Promise<Article[]>;
   getPendingArticles(): Promise<Article[]>;
@@ -188,6 +189,14 @@ export class PostgresNewsRepository implements NewsRepository {
   async findPublishedArticle(id: string) {
     const result = await this.query('SELECT * FROM articles WHERE id = $1 AND status = \'PUBLISHED\'', [id]);
     return result.rows[0] ? mapArticle(result.rows[0]) : undefined;
+  }
+
+  async findRelatedArticles(category: NewsCategory, currentId: string, limit: number = 3): Promise<Article[]> {
+    const result = await this.query(
+      "SELECT * FROM articles WHERE status = 'PUBLISHED' AND id != $1 AND (category = $2 OR $2 = 'GENERAL') ORDER BY published_at DESC LIMIT $3",
+      [currentId, category, limit]
+    );
+    return result.rows.map(mapArticle);
   }
 
   async getStats(): Promise<FeedStats> {

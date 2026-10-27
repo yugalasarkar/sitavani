@@ -19,6 +19,10 @@ export function getPublishedArticle(id: string) {
   return newsRepository.findPublishedArticle(id);
 }
 
+export function getRelatedArticles(category: NewsCategory, currentId: string, limit = 3) {
+  return newsRepository.findRelatedArticles(category, currentId, limit);
+}
+
 export function getStats() {
   return newsRepository.getStats();
 }

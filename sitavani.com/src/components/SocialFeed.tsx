@@ -32,6 +32,7 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
   const [newContent, setNewContent] = useState('');
   const [newSabha, setNewSabha] = useState('varta');
   const [newMediaUrl, setNewMediaUrl] = useState('');
+  const [newOriginalUrl, setNewOriginalUrl] = useState('');
   const [isPinned, setIsPinned] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
@@ -44,6 +45,28 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
       loadPosts(selectedSabha, sort);
     };
     window.addEventListener('sitavani:wallet_changed', onWalletChange);
+
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('new_post') === '1' || p.get('create') === '1') {
+        const qTitle = p.get('title');
+        const qContent = p.get('content');
+        const qRefUrl = p.get('ref_url');
+        const qMedia = p.get('media');
+        const qSabha = p.get('sabha');
+
+        if (qTitle) setNewTitle(qTitle);
+        if (qContent) setNewContent(qContent);
+        if (qRefUrl) setNewOriginalUrl(qRefUrl);
+        if (qMedia) setNewMediaUrl(qMedia);
+        if (qSabha && sabhas.some(s => s.slug === qSabha)) {
+          setNewSabha(qSabha);
+          setSelectedSabha(qSabha);
+        }
+        setShowCreateModal(true);
+      }
+    }
+
     return () => window.removeEventListener('sitavani:wallet_changed', onWalletChange);
   }, [selectedSabha, sort]);
 
@@ -150,6 +173,7 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
           sabha_slug: newSabha,
           title: newTitle.trim(),
           content: newContent.trim(),
+          original_url: newOriginalUrl.trim() || undefined,
           media_url: newMediaUrl.trim() || undefined,
           is_pinned: session?.isAdmin ? isPinned : false,
           is_official_dispatch: session?.isAdmin ? true : false
@@ -167,6 +191,7 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
       setNewTitle('');
       setNewContent('');
       setNewMediaUrl('');
+      setNewOriginalUrl('');
       setIsPinned(false);
     } catch (err: any) {
       setPostError(err?.message || 'Publication failed.');
@@ -443,6 +468,17 @@ export const SocialFeed: React.FC<SocialFeedProps> = ({
                   placeholder="https://..."
                   value={newMediaUrl}
                   onChange={e => setNewMediaUrl(e.target.value)}
+                  className="w-full bg-[#07090E] border border-slate-800 rounded-lg p-2 text-slate-100 focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">स्रोतः Primary Archival Source / Reference Link (Optional)</label>
+                <input
+                  type="url"
+                  placeholder="https://sitavani.com/articles/... or archival source"
+                  value={newOriginalUrl}
+                  onChange={e => setNewOriginalUrl(e.target.value)}
                   className="w-full bg-[#07090E] border border-slate-800 rounded-lg p-2 text-slate-100 focus:border-amber-500"
                 />
               </div>

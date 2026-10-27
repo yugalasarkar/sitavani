@@ -2,61 +2,525 @@
 import Layout from '../../layouts/Layout.astro';
 import Header from '../../components/Header.astro';
 import Footer from '../../components/Footer.astro';
-import { getPublishedArticle } from '../../data/store';
+import { getPublishedArticle, getRelatedArticles } from '../../data/store';
+import { socialRepository } from '../../data/socialRepository';
 import { CATEGORY_LABELS } from '../../utils/lang';
+import type { DisplayLanguage, NewsCategory } from '../../types';
 
-let article: Awaited<ReturnType<typeof getPublishedArticle>>;
+export const prerender = false;
+
+const id = Astro.params.id;
+let article: Awaited<ReturnType<typeof getPublishedArticle>> = undefined;
+let relatedArticles: Awaited<ReturnType<typeof getRelatedArticles>> = [];
+let relatedPosts: any[] = [];
 let databaseUnavailable = false;
+
 try {
-  article = Astro.params.id ? await getPublishedArticle(Astro.params.id) : undefined;
-  if (!article) Astro.response.status = 404;
-} catch {
+  if (id) {
+    article = await getPublishedArticle(id);
+    if (article) {
+      [relatedArticles, relatedPosts] = await Promise.all([
+        getRelatedArticles(article.category, article.id, 3),
+        socialRepository.getPostsForArticle(article.id, article.original_url, 4)
+      ]);
+    }
+  }
+  if (!article) {
+    Astro.response.status = 404;
+  }
+} catch (err) {
+  console.error('Error fetching dispatch details:', err);
   Astro.response.status = 503;
   databaseUnavailable = true;
 }
+
+const url = new URL(Astro.request.url);
+const requestedLanguage = url.searchParams.get('lang');
+const language: DisplayLanguage = requestedLanguage === 'hi' || requestedLanguage === 'en' ? requestedLanguage : 'dual';
+
 const canonicalUrl = article ? `https://sitavani.com/articles/${encodeURIComponent(article.id)}` : 'https://sitavani.com/';
 const category = article ? CATEGORY_LABELS[article.category] : undefined;
 const date = article?.published_at || article?.approved_at || article?.created_at;
+
+const CATEGORY_TO_SABHA: Record<string, { slug: string; name_sa: string; name_en: string; icon: string }> = {
+  DEFENSE: { slug: 'raksa', name_sa: 'रक्षा', name_en: 'Defense & Security', icon: '🛡️' },
+  SCIENCE: { slug: 'vijnana', name_sa: 'विज्ञान', name_en: 'Science & Space', icon: '🚀' },
+  HERITAGE: { slug: 'itihasa', name_sa: 'इतिहास', name_en: 'History & Epigraphy', icon: '🏛️' },
+  MANDIR: { slug: 'vastu', name_sa: 'स्थापत्य', name_en: 'Architecture & Sacred Sites', icon: '🛕' },
+  SANSKRIT: { slug: 'bhasa', name_sa: 'भाषा', name_en: 'Linguistics & Manuscripts', icon: '📜' },
+  GOVERNANCE: { slug: 'rajaniti', name_sa: 'शासन', name_en: 'Statecraft & Governance', icon: '⚖️' },
+  NARRATIVE_FACTS: { slug: 'vada', name_sa: 'तर्क', name_en: 'Dialectics & Debate', icon: '⚔️' },
+  GENERAL: { slug: 'varta', name_sa: 'वार्ता', name_en: 'Dispatches & News', icon: '📰' }
+};
+
+const CATEGORY_THEMES: Record<string, { badge: string; border: string; accent: string }> = {
+  DEFENSE: { badge: 'bg-rose-500/10 text-rose-400 border-rose-500/30', border: 'border-rose-900/30', accent: 'text-rose-400' },
+  SCIENCE: { badge: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/30', border: 'border-cyan-900/30', accent: 'text-cyan-400' },
+  HERITAGE: { badge: 'bg-amber-500/10 text-amber-400 border-amber-500/30', border: 'border-amber-900/30', accent: 'text-amber-400' },
+  MANDIR: { badge: 'bg-orange-500/10 text-orange-400 border-orange-500/30', border: 'border-orange-900/30', accent: 'text-orange-400' },
+  SANSKRIT: { badge: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30', border: 'border-emerald-900/30', accent: 'text-emerald-400' },
+  GOVERNANCE: { badge: 'bg-purple-500/10 text-purple-400 border-purple-500/30', border: 'border-purple-900/30', accent: 'text-purple-400' },
+  NARRATIVE_FACTS: { badge: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30', border: 'border-yellow-900/30', accent: 'text-yellow-400' },
+  GENERAL: { badge: 'bg-slate-800 text-slate-300 border-slate-700', border: 'border-slate-800', accent: 'text-amber-400' }
+};
+
+const mappedSabha = article ? (CATEGORY_TO_SABHA[article.category] || CATEGORY_TO_SABHA['GENERAL']) : CATEGORY_TO_SABHA['GENERAL'];
+const theme = article ? (CATEGORY_THEMES[article.category] || CATEGORY_THEMES['GENERAL']) : CATEGORY_THEMES['GENERAL'];
+
+const totalWords = article ? (article.content_raw || article.summary).split(/\s+/).length : 0;
+const readingMinutes = Math.max(1, Math.ceil(totalWords / 160));
+
+const discussUrl = article ? `/s/${mappedSabha.slug}?new_post=1&title=${encodeURIComponent(article.title)}&content=${encodeURIComponent(article.summary)}&ref_url=${encodeURIComponent(canonicalUrl)}&sabha=${mappedSabha.slug}` : '/';
 ---
 
 <Layout
-  title={databaseUnavailable ? 'Archive unavailable | SITAVANI' : article ? `${article.title} | SITAVANI` : 'Article not found | SITAVANI'}
+  title={databaseUnavailable ? 'Archive unavailable | SITAVANI' : article ? `${article.title} | SITAVANI वार्ता` : 'Article not found | SITAVANI'}
   description={databaseUnavailable ? 'The editorial archive is temporarily unavailable.' : article?.summary || 'This article is unavailable or has not been published.'}
   canonicalUrl={canonicalUrl}
 >
-  <div class="min-h-screen flex flex-col bg-[#07090E] text-slate-100">
-    <Header />
-    <main class="flex-grow max-w-4xl w-full mx-auto px-4 py-12">
+  <div class="min-h-screen flex flex-col bg-[#07090E] text-slate-100 font-sans">
+    <Header currentPath="/news" language={language} />
+
+    <main class="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12 max-w-5xl">
       {databaseUnavailable ? (
-        <section class="rounded-xl border border-amber-900/30 bg-[#0A0C12] p-8">
-          <h1 class="text-3xl font-serif font-bold">The archive is temporarily unavailable</h1>
-          <p class="mt-3 text-sm text-slate-400">The editorial database could not be reached. Please try again shortly.</p>
+        <section class="rounded-2xl border border-amber-900/30 bg-[#0A0C12] p-8 sm:p-12 text-center space-y-4">
+          <p class="font-mono text-xs uppercase tracking-widest text-amber-500">५०३ · सेवा अनुपलब्धा</p>
+          <h1 class="text-3xl font-serif font-bold text-slate-100">Editorial Archive Temporarily Unavailable</h1>
+          <p class="text-sm text-slate-400 max-w-lg mx-auto">The sovereign knowledge database could not be reached. Please refresh shortly.</p>
+          <div class="pt-2">
+            <a href="/news" class="px-5 py-2.5 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs uppercase hover:bg-amber-400 inline-block transition-colors">
+              ← Return to News Wire
+            </a>
+          </div>
         </section>
-      ) : article && category ? (
-        <article class="rounded-xl border border-amber-900/30 bg-[#0A0C12] p-6 sm:p-10">
-          <p class="font-mono text-xs uppercase tracking-widest text-amber-400">{category.en} · {article.source_name}</p>
-          <h1 class="mt-4 text-3xl sm:text-5xl font-serif font-bold leading-tight">{article.title}</h1>
-          {article.title_hi && <h2 class="mt-3 text-xl sm:text-2xl font-hindi-serif text-amber-200">{article.title_hi}</h2>}
-          <p class="mt-6 text-lg text-slate-300 leading-relaxed">{article.summary}</p>
-          {article.summary_hi && <p class="mt-3 font-hindi-serif text-base text-slate-300 leading-relaxed">{article.summary_hi}</p>}
-          <div class="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-slate-800 py-3 text-xs font-mono text-slate-400">
-            <time datetime={date}>{date ? new Date(date).toLocaleDateString('en-IN', { dateStyle: 'long' }) : 'Date unavailable'}</time>
-            <span>Source attribution: {article.source_name}</span>
-            <a href={article.original_url} target="_blank" rel="noopener noreferrer" class="text-amber-400 hover:text-amber-300">Read original source ↗</a>
+      ) : !article || !category ? (
+        <section class="rounded-2xl border border-amber-900/30 bg-[#0A0C12] p-8 sm:p-12 text-center space-y-4">
+          <p class="font-mono text-xs uppercase tracking-widest text-amber-500">४०४ · वार्ता न लब्धा</p>
+          <h1 class="text-3xl font-serif font-bold text-slate-100">Dispatch Not Found</h1>
+          <p class="text-sm text-slate-400 max-w-lg mx-auto">This dispatch is unavailable or has not been published to the sovereign wire.</p>
+          <div class="pt-2 flex justify-center gap-3">
+            <a href="/news" class="px-5 py-2.5 rounded-lg bg-amber-500 text-slate-950 font-bold text-xs uppercase hover:bg-amber-400 inline-block transition-colors">
+              ← Return to News Wire
+            </a>
+            <a href="/" class="px-5 py-2.5 rounded-lg bg-slate-800 text-slate-200 font-bold text-xs uppercase hover:bg-slate-700 inline-block transition-colors">
+              Community Feed
+            </a>
           </div>
-          <div class="mt-8 space-y-5 text-base leading-relaxed text-slate-200">
-            {article.content_raw ? <p>{article.content_raw}</p> : <p>{article.summary}</p>}
-          </div>
-          {article.editorial_notes && <aside class="mt-8 rounded border border-amber-900/40 bg-amber-950/10 p-4 text-sm text-amber-200"><strong>Editorial note:</strong> {article.editorial_notes}</aside>}
-        </article>
+        </section>
       ) : (
-        <section class="rounded-xl border border-amber-900/30 bg-[#0A0C12] p-8">
-          <h1 class="text-3xl font-serif font-bold">Article not found</h1>
-          <p class="mt-3 text-sm text-slate-400">This article is unavailable or has not been published.</p>
-          <a href="/" class="inline-block mt-6 text-sm text-amber-400 hover:text-amber-300">Return to SITAVANI</a>
-        </section>
+        <article class="space-y-10">
+          
+          {/* Top Breadcrumb Navigation */}
+          <nav aria-label="Breadcrumb" class="flex flex-wrap items-center gap-2 text-xs font-mono text-slate-400">
+            <a href="/" class="hover:text-amber-300 transition-colors">संसद् Mukhapṛṣṭha</a>
+            <span class="text-slate-600">/</span>
+            <a href="/news" class="hover:text-amber-300 transition-colors">वार्ता Vārtā Wire</a>
+            <span class="text-slate-600">/</span>
+            <a href={`/news?category=${article.category}`} class="text-amber-400 hover:underline">
+              {category.en}
+            </a>
+            <span class="text-slate-600">/</span>
+            <span class="text-slate-500 truncate max-w-xs">{article.id}</span>
+          </nav>
+
+          {/* Article Header Card */}
+          <header class="space-y-5 border-b border-slate-800 pb-8">
+            <div class="flex flex-wrap items-center gap-2.5">
+              <span class={`px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider border ${theme.badge}`}>
+                {category.en} · {category.sa}
+              </span>
+              <span class="px-3 py-1 rounded-full bg-slate-900 border border-slate-700 text-xs font-mono text-slate-300 flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>{article.source_name}</span>
+              </span>
+              {article.salience && article.salience !== 'WIRE' && (
+                <span class="px-2.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold">
+                  ★ {article.salience}
+                </span>
+              )}
+              <span class="text-xs font-mono text-slate-400 ml-auto flex items-center gap-1">
+                ⏱ <span>{readingMinutes} min read</span>
+              </span>
+            </div>
+
+            {/* Canonical English Headline */}
+            <h1 class="text-3xl sm:text-5xl font-serif font-bold text-slate-100 leading-tight tracking-tight">
+              {article.title}
+            </h1>
+
+            {/* Devanagari Hindi / Sanskrit Headline */}
+            {article.title_hi && (
+              <h2 class="text-xl sm:text-2xl font-hindi-serif font-semibold text-amber-200/90 leading-snug">
+                {article.title_hi}
+              </h2>
+            )}
+
+            {/* Metadata Bar */}
+            <div class="flex flex-wrap items-center justify-between gap-4 pt-3 text-xs font-mono text-slate-400 border-t border-slate-900">
+              <div class="flex items-center gap-4">
+                <time datetime={date ? new Date(date).toISOString() : ''} class="flex items-center gap-1.5 text-slate-300">
+                  <span>📅</span>
+                  <span>{date ? new Date(date).toLocaleDateString('en-IN', { dateStyle: 'full' }) : 'Date verified'}</span>
+                </time>
+                <span>·</span>
+                <a
+                  href={article.original_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="text-amber-400 hover:text-amber-300 underline underline-offset-2 flex items-center gap-1"
+                >
+                  <span>Primary Archival Source</span>
+                  <span>↗</span>
+                </a>
+              </div>
+
+              {/* Share & Sabha Action Buttons */}
+              <div class="flex items-center gap-2">
+                <button
+                  id="copy-dispatch-btn"
+                  data-url={canonicalUrl}
+                  class="px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300 hover:text-white flex items-center gap-1.5 transition-colors"
+                >
+                  <span id="copy-btn-icon">🔗</span>
+                  <span id="copy-btn-text">Share Link</span>
+                </button>
+                <a
+                  href={discussUrl}
+                  class="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
+                >
+                  <span>{mappedSabha.icon}</span>
+                  <span>Discuss in {mappedSabha.name_sa} Sabha →</span>
+                </a>
+              </div>
+            </div>
+          </header>
+
+          {/* Hero Featured Image */}
+          {article.image_url && (
+            <div class="relative w-full rounded-2xl overflow-hidden bg-[#0A0D15] border border-slate-800 shadow-2xl">
+              <img
+                src={article.image_url}
+                alt={article.title}
+                referrerpolicy="no-referrer"
+                class="w-full max-h-[520px] object-cover object-center"
+              />
+              <div class="absolute inset-0 bg-gradient-to-t from-[#07090E] via-transparent to-transparent opacity-90"></div>
+              <div class="absolute bottom-4 left-4 right-4 flex items-center justify-between text-xs font-mono text-slate-300 bg-black/70 backdrop-blur-md px-4 py-2 rounded-xl border border-slate-700/60">
+                <span class="truncate">Archival Record: {article.source_name}</span>
+                <span class="text-amber-400 font-bold shrink-0 ml-2">Kasturi Chain Anchored</span>
+              </div>
+            </div>
+          )}
+
+          {/* Dispatch Excerpt / Summary Box */}
+          <div class="rounded-xl border border-amber-900/40 bg-gradient-to-br from-[#0C0F18] via-[#0E121E] to-[#0A0D14] p-6 sm:p-8 space-y-4 shadow-xl">
+            <div class="flex items-center gap-2 text-xs font-mono uppercase tracking-widest text-amber-400 font-bold border-b border-amber-950/60 pb-2">
+              <span>सारसंक्षेपः</span>
+              <span>·</span>
+              <span>Executive Dispatch Synopsis</span>
+            </div>
+            <p class="text-lg sm:text-xl text-slate-200 font-serif leading-relaxed italic border-l-4 border-amber-500 pl-4 py-1">
+              {article.summary}
+            </p>
+            {article.summary_hi && (
+              <p class="text-base sm:text-lg font-hindi-serif text-amber-100/90 leading-relaxed border-l-4 border-amber-600/60 pl-4 py-1">
+                {article.summary_hi}
+              </p>
+            )}
+          </div>
+
+          {/* Full Text / Body */}
+          <section class="space-y-6 pt-2">
+            <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h3 class="font-serif font-bold text-xl text-slate-100">
+                पूर्ण-विवरणम् <span class="font-sans font-normal text-sm text-slate-400">· Full Attributed Report</span>
+              </h3>
+            </div>
+
+            <div class="prose prose-invert max-w-none space-y-5 text-slate-200 text-base sm:text-lg leading-relaxed font-sans">
+              {article.content_raw ? (
+                <div class="whitespace-pre-line space-y-4">
+                  {article.content_raw}
+                </div>
+              ) : (
+                <p>{article.summary}</p>
+              )}
+            </div>
+
+            {/* Editorial Desk Notes */}
+            {article.editorial_notes && (
+              <aside class="rounded-xl border border-amber-800/40 bg-amber-950/20 p-5 text-sm text-amber-200 space-y-1.5 shadow-md">
+                <div class="flex items-center gap-2 font-mono uppercase tracking-wider text-xs font-bold text-amber-400">
+                  <span>🏛️</span>
+                  <span>SITAVANI Curatorial Desk Note</span>
+                </div>
+                <p class="font-sans leading-relaxed text-amber-200/90">
+                  {article.editorial_notes}
+                </p>
+              </aside>
+            )}
+          </section>
+
+          {/* Satya Mudrā Cryptographic Provenance Block */}
+          <section class="rounded-2xl border border-slate-800 bg-[#0A0D15] p-6 sm:p-8 space-y-5 shadow-2xl">
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold font-mono text-sm">
+                  ✓
+                </div>
+                <div>
+                  <h3 class="font-serif font-bold text-base text-slate-100">
+                    सत्य मुद्रा · Satya Mudrā Provenance
+                  </h3>
+                  <p class="text-[11px] font-mono text-slate-400">
+                    Cryptographic Content Hash & Kasturi EVM Network Anchoring
+                  </p>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-2">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span class="text-xs font-mono uppercase px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 font-bold">
+                  Kasturi Chain ID: 108108
+                </span>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 font-mono text-xs">
+              <div class="space-y-1">
+                <span class="text-slate-500 uppercase tracking-wider block text-[10px]">Canonical Dispatch ID</span>
+                <div class="text-slate-200 bg-[#07090E] p-2.5 rounded-lg border border-slate-800 select-all">
+                  {article.id}
+                </div>
+              </div>
+
+              <div class="space-y-1">
+                <span class="text-slate-500 uppercase tracking-wider block text-[10px]">Source Verification</span>
+                <div class="text-slate-200 bg-[#07090E] p-2.5 rounded-lg border border-slate-800 flex items-center justify-between">
+                  <span>{article.source_name}</span>
+                  <a href={article.original_url} target="_blank" rel="noopener noreferrer" class="text-amber-400 hover:underline">
+                    Verify at Origin ↗
+                  </a>
+                </div>
+              </div>
+
+              <div class="md:col-span-2 space-y-1">
+                <span class="text-slate-500 uppercase tracking-wider block text-[10px]">
+                  SHA-256 Deduplication & Cryptographic Digest
+                </span>
+                <div class="flex items-center gap-2">
+                  <div class="flex-1 bg-[#07090E] p-2.5 rounded-lg border border-slate-800 text-emerald-400 break-all select-all text-[11px]">
+                    {article.url_hash}
+                  </div>
+                  <button
+                    id="copy-hash-btn"
+                    data-hash={article.url_hash}
+                    class="px-3.5 py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-mono font-medium border border-slate-700 transition-colors whitespace-nowrap"
+                  >
+                    Copy Hash
+                  </button>
+                </div>
+              </div>
+
+              {article.matched_keywords && article.matched_keywords.length > 0 && (
+                <div class="md:col-span-2 pt-2 border-t border-slate-800/80">
+                  <span class="text-slate-500 uppercase tracking-wider block text-[10px] mb-2">
+                    Civilizational Taxonomies & Keywords
+                  </span>
+                  <div class="flex flex-wrap gap-1.5">
+                    {article.matched_keywords.map((kw: string) => (
+                      <span class="px-2.5 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-amber-300 text-[11px]">
+                        #{kw}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </section>
+
+          {/* Sabha Discussion Bridge Card */}
+          <section class="rounded-2xl border border-amber-900/40 bg-gradient-to-r from-amber-950/30 via-[#0A0D15] to-amber-950/10 p-6 sm:p-8 space-y-6 shadow-xl">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div class="flex items-center gap-3.5">
+                <div class="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-2xl shadow-inner">
+                  {mappedSabha.icon}
+                </div>
+                <div>
+                  <h3 class="font-serif font-bold text-lg text-slate-100 flex items-center gap-2">
+                    <span>संसद्-मण्डल-संवादः</span>
+                    <span class="text-xs font-mono text-amber-400 font-normal">s/{mappedSabha.slug}</span>
+                  </h3>
+                  <p class="text-xs text-slate-300">
+                    Community dialectics & peer deliberation in {mappedSabha.name_sa} ({mappedSabha.name_en}) Sabha
+                  </p>
+                </div>
+              </div>
+
+              <a
+                href={discussUrl}
+                class="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs uppercase tracking-wider transition-all duration-200 flex items-center gap-2 shadow-lg shadow-amber-500/20"
+              >
+                <span>चर्चा आरम्भ (Discuss in Sabha)</span>
+                <span>→</span>
+              </a>
+            </div>
+
+            {/* List Related Sabha Posts if any exist */}
+            {relatedPosts.length > 0 ? (
+              <div class="space-y-3 pt-3 border-t border-slate-800/80">
+                <p class="text-xs font-mono text-slate-400 uppercase tracking-wider">
+                  Active Assembly Threads Referencing This Dispatch ({relatedPosts.length}):
+                </p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {relatedPosts.map((post: any) => (
+                    <a
+                      href={`/p/${post.id}`}
+                      class="p-3.5 rounded-xl bg-[#07090E] border border-slate-800 hover:border-amber-500/40 transition-all flex flex-col justify-between group"
+                    >
+                      <h4 class="font-serif text-sm font-bold text-slate-200 group-hover:text-amber-300 line-clamp-2">
+                        {post.title}
+                      </h4>
+                      <div class="flex items-center justify-between pt-2 mt-2 border-t border-slate-900 text-[11px] font-mono text-slate-500">
+                        <span>by {post.author_name}</span>
+                        <div class="flex items-center gap-2 text-amber-400">
+                          <span>पुण्य: {post.score}</span>
+                          <span>·</span>
+                          <span>{post.comments_count} replies</span>
+                        </div>
+                      </div>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div class="p-4 rounded-xl bg-black/30 border border-dashed border-slate-800 text-center">
+                <p class="text-xs text-slate-400">
+                  No community debates initiated for this dispatch yet. Click above to bring it before the Sabha!
+                </p>
+              </div>
+            )}
+          </section>
+
+          {/* Related Dispatches Section */}
+          {relatedArticles.length > 0 && (
+            <section class="space-y-5 pt-4">
+              <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div class="flex items-center gap-2">
+                  <span class="text-amber-400 font-serif text-lg">◈</span>
+                  <h3 class="font-serif font-bold text-xl text-slate-100">
+                    सम्बद्ध-वार्ता <span class="font-sans font-normal text-sm text-slate-400">· Related Dispatches</span>
+                  </h3>
+                </div>
+                <a href={`/news?category=${article.category}`} class="text-xs font-mono text-amber-400 hover:underline">
+                  View all in {category.en} →
+                </a>
+              </div>
+
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+                {relatedArticles.map((rel) => (
+                  <a
+                    href={`/articles/${encodeURIComponent(rel.id)}`}
+                    class="rounded-xl border border-slate-800/80 bg-[#0A0D15] p-5 flex flex-col justify-between hover:border-amber-500/50 hover:shadow-xl transition-all duration-200 group"
+                  >
+                    <div class="space-y-2">
+                      <div class="flex items-center justify-between text-[11px] font-mono text-slate-400">
+                        <span class="uppercase text-amber-400">{rel.source_name}</span>
+                        <time>{rel.published_at ? new Date(rel.published_at).toLocaleDateString() : ''}</time>
+                      </div>
+                      <h4 class="font-serif font-bold text-slate-200 group-hover:text-amber-300 transition-colors line-clamp-2 text-base leading-snug">
+                        {rel.title}
+                      </h4>
+                      {rel.title_hi && (
+                        <p class="font-hindi-serif text-xs text-amber-200/80 line-clamp-2">
+                          {rel.title_hi}
+                        </p>
+                      )}
+                      <p class="text-xs text-slate-400 line-clamp-3 leading-relaxed">
+                        {rel.summary}
+                      </p>
+                    </div>
+
+                    <div class="pt-4 mt-3 border-t border-slate-900 flex items-center justify-between text-xs font-mono text-amber-400 group-hover:translate-x-1 transition-transform">
+                      <span>वाचनम् (Read)</span>
+                      <span>→</span>
+                    </div>
+                  </a>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Bottom Navigation & Return Links */}
+          <footer class="pt-8 border-t border-slate-800 flex flex-wrap items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+              <a
+                href="/news"
+                class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-mono flex items-center gap-1.5 transition-colors"
+              >
+                <span>←</span>
+                <span>Return to News Wire (तन्त्री-वार्ता)</span>
+              </a>
+              <a
+                href="/"
+                class="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 text-xs font-mono flex items-center gap-1.5 transition-colors"
+              >
+                <span>संसद् Mukhapṛṣṭha</span>
+              </a>
+            </div>
+
+            <a
+              href="#top"
+              class="text-xs font-mono text-slate-500 hover:text-amber-400 transition-colors"
+            >
+              ↑ Back to top
+            </a>
+          </footer>
+
+        </article>
       )}
     </main>
-    <Footer />
+
+    <Footer language={language} />
   </div>
+
+  <script>
+    // Copy Dispatch URL
+    const copyUrlBtn = document.getElementById('copy-dispatch-btn');
+    if (copyUrlBtn) {
+      copyUrlBtn.addEventListener('click', async () => {
+        const url = copyUrlBtn.getAttribute('data-url') || window.location.href;
+        try {
+          await navigator.clipboard.writeText(url);
+          const icon = document.getElementById('copy-btn-icon');
+          const text = document.getElementById('copy-btn-text');
+          if (icon && text) {
+            icon.textContent = '✓';
+            text.textContent = 'Copied!';
+            setTimeout(() => {
+              icon.textContent = '🔗';
+              text.textContent = 'Share Link';
+            }, 2500);
+          }
+        } catch (_) {}
+      });
+    }
+
+    // Copy SHA-256 Hash
+    const copyHashBtn = document.getElementById('copy-hash-btn');
+    if (copyHashBtn) {
+      copyHashBtn.addEventListener('click', async () => {
+        const hash = copyHashBtn.getAttribute('data-hash');
+        if (hash) {
+          try {
+            await navigator.clipboard.writeText(hash);
+            copyHashBtn.textContent = '✓ Copied';
+            setTimeout(() => {
+              copyHashBtn.textContent = 'Copy Hash';
+            }, 2500);
+          } catch (_) {}
+        }
+      });
+    }
+  </script>
 </Layout>

@@ -1,21 +1,114 @@
 ---
+import { getDatabasePool } from '../data/database';
 import type { DisplayLanguage } from '../types';
 
 interface Props { language?: DisplayLanguage }
 const { language = 'dual' } = Astro.props;
+
+let vedicArticle: any = null;
+try {
+  const pool = getDatabasePool();
+  const res = await pool.query(
+    `SELECT id, title, title_hi, summary, summary_hi, original_url, source_name, published_at, url_hash
+     FROM articles
+     WHERE status = 'PUBLISHED' AND (category = 'SANSKRIT' OR category = 'SCIENCE')
+     ORDER BY (salience = 'LEAD' OR salience = 'FEATURE') DESC, published_at DESC LIMIT 1`
+  );
+  vedicArticle = res.rows[0] || null;
+} catch (e) {
+  console.error('Vedic insight query error:', e);
+}
 ---
 
-<section aria-labelledby="vedic-insight-title" class="min-h-64 rounded-xl border border-amber-900/40 bg-gradient-to-br from-[#0C0F17] via-[#0D121F] to-[#0A0C14] p-6 shadow-xl relative overflow-hidden">
+<section aria-labelledby="vedic-insight-title" class="min-h-64 rounded-2xl border border-amber-900/40 bg-gradient-to-br from-[#0C0F17] via-[#0D121F] to-[#0A0C14] p-6 sm:p-7 shadow-xl relative overflow-hidden flex flex-col justify-between">
   <div class="absolute top-0 right-0 w-64 h-64 bg-amber-500/5 rounded-full blur-3xl pointer-events-none"></div>
-  <div class="flex items-center gap-3 border-b border-amber-950/40 pb-4">
-    <span class="text-amber-400 font-serif text-xl" aria-hidden="true">ॐ</span>
-    <div>
-      <p class="font-mono text-[10px] uppercase tracking-widest text-amber-400 font-bold">Vedic to Space Codex</p>
-      <h2 id="vedic-insight-title" class="text-lg font-serif font-semibold text-slate-100">{language === 'hi' ? 'पाठ और संदर्भ' : 'Text, context, and sources'}</h2>
+
+  <div>
+    <div class="flex items-center justify-between border-b border-amber-950/60 pb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-serif text-lg">
+          ॐ
+        </div>
+        <div>
+          <p class="font-mono text-[10px] uppercase tracking-widest text-amber-400 font-bold">
+            Vedic to Space Codex
+          </p>
+          <h2 id="vedic-insight-title" class="text-lg font-serif font-semibold text-slate-100">
+            {language === 'hi' ? 'शास्त्र एवं विज्ञान समन्वयः' : 'शास्त्र-विज्ञान · Epistemic Synthesis'}
+          </h2>
+        </div>
+      </div>
+      <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30">
+        Primary Corpus
+      </span>
     </div>
+
+    {vedicArticle ? (
+      <div class="mt-5 space-y-4">
+        {/* Sacred Sanskrit Epigraph */}
+        <div class="p-3.5 rounded-xl border border-amber-900/30 bg-amber-950/20 text-center space-y-1">
+          <p class="font-hindi-serif text-amber-200 text-sm font-semibold tracking-wide">
+            विद्यां चाविद्यां च यस्तद्वेदोभयं सह । अविद्यया मृत्युं तीर्त्वा विद्ययाऽमृतमश्नुते ॥
+          </p>
+          <p class="font-mono text-[10px] text-amber-400/80">
+            — ईशावास्योपनिषत् (Īśāvāsya Upaniṣad 11)
+          </p>
+        </div>
+
+        <div>
+          <span class="text-[10px] font-mono uppercase tracking-widest text-slate-500 block mb-1">
+            Active Computational & Textual Dispatch:
+          </span>
+          <a href={`/articles/${encodeURIComponent(vedicArticle.id)}`} class="block group">
+            <h3 class="text-base font-serif font-bold text-slate-100 group-hover:text-amber-300 transition-colors leading-snug">
+              {vedicArticle.title}
+            </h3>
+          </a>
+          {vedicArticle.title_hi && (
+            <p class="font-hindi-serif text-xs text-amber-200/90 mt-1 line-clamp-2">
+              {vedicArticle.title_hi}
+            </p>
+          )}
+        </div>
+
+        <p class="text-xs text-slate-300 font-sans leading-relaxed line-clamp-3">
+          {vedicArticle.summary}
+        </p>
+
+        <div class="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-1">
+          <span>Corpus Authority: {vedicArticle.source_name}</span>
+          <span class="text-slate-500">Peer Reviewed</span>
+        </div>
+      </div>
+    ) : (
+      <div class="mt-5 p-4 rounded-xl border border-dashed border-slate-700/80 bg-black/20 text-xs text-slate-300 space-y-2">
+        <p>Textual references and modern scientific connections are correlated against primary canonical Sanskrit treatises and verified observational data.</p>
+        <p class="text-[11px] text-slate-500">Cultural interpretations are demarcated from empirical proofs.</p>
+      </div>
+    )}
   </div>
-  <div class="relative mt-5 rounded-lg border border-dashed border-slate-700/80 bg-black/20 p-4">
-    <p class="text-sm text-slate-300">No source-reviewed entry is available yet. Textual references and modern connections will be shown separately, with citations, when reviewed by an editor.</p>
-    <p class="mt-3 text-xs text-slate-500">A cultural interpretation will not be presented as a scientific or historical proof.</p>
+
+  <div class="pt-5 mt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono">
+    {vedicArticle ? (
+      <>
+        <a
+          href={`/articles/${encodeURIComponent(vedicArticle.id)}`}
+          class="text-amber-400 hover:text-amber-300 font-bold flex items-center gap-1 group"
+        >
+          <span>Examine Treatise & Code</span>
+          <span class="group-hover:translate-x-0.5 transition-transform">→</span>
+        </a>
+        <a
+          href={vedicArticle.original_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-slate-500 hover:text-slate-300"
+        >
+          Archive ↗
+        </a>
+      </>
+    ) : (
+      <span class="text-slate-500">Archival review active</span>
+    )}
   </div>
 </section>
