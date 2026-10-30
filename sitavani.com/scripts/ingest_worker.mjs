@@ -64,25 +64,65 @@ function sanitizeSovereignTerms(text) {
 }
 
 function determineCategory(text, sourceName = '') {
-  const lower = (text + ' ' + sourceName).toLowerCase();
-  if (/temple|excavation|archaeol|monument|mandir|heritage|inscription|chola|harappa|purana|kashi|varanasi|ayodhya|tirtha|deity|sculpture|culture/.test(lower)) {
-    return 'HERITAGE';
-  }
-  if (/drdo|defense|defence|army|navy|air force|military|missile|tejas|radar|frigate|warship|ammunition|combat|patrol|squadron/.test(lower)) {
-    return 'DEFENSE';
-  }
-  if (/isro|space|satellite|chandrayaan|payload|quantum|cryogenic|orbit|cosmic|astronomy|physics|biotech|nanotech|algorithm|ai|deep space|tech|science/.test(lower)) {
-    return 'SCIENCE';
-  }
-  if (/sanskrit|shastra|vedic|veda|upanishad|manuscript|panini|ashtadhyayi|vyakarana|bhashya|samhita/.test(lower)) {
-    return 'SANSKRIT';
-  }
-  if (/ramsar|wetland|sanctuary|dharma|pilgrimage|kund|ghat|sacred/.test(lower)) {
+  const content = (text || '').toLowerCase();
+  const source = (sourceName || '').toLowerCase();
+
+  // 1. MANDIR (Sacred Sanatan Geography, Temples, Kunds, Pilgrimage, Pujas, Deities)
+  if (
+    /मंदिर|मन्दिर|तीर्थ|देवस्थान|गर्भगृह|परिक्रमा|कुण्ड|घाट|पुजारी|महादेव|शिवलिंग|दर्शन|आरती|विष्णु|दुर्गा|हनुमान|रामलला|सोमनाथ|केदारनाथ|बद्रीनाथ|काशी\s*विश्वनाथ|अयोध्या|महाकाल|उज्जैन|मीनाक्षी|तिरुपति|जगन्नाथ|द्वारका|श्रद्धालु|आध्यात्मिक/.test(text) ||
+    /\b(mandir|temple|tirth|tirtha|devasthan|sanctum|parikrama|kund|ghat|puja|deity|kashi vishwanath|ayodhya|ram mandir|somnath|kedarnath|badrinath|mahakal|tirupati|jagannath|garbhagriha|pilgrimage|sacred shrine|jyotirlinga)\b/.test(content) ||
+    /temple\s*connect|sanatan\s*wires|dharmik/.test(source)
+  ) {
     return 'MANDIR';
   }
-  if (/pib|cabinet|prime minister|president|niti aayog|governance|reform|parliament|ordinance|infrastructure|highway|railways/.test(lower)) {
+
+  // 2. HERITAGE & ITIHASA (Archeology, ASI, Inscriptions, Ancient History, Decolonization, Reclaiming Ancient Names, Chola Bronzes)
+  if (
+    /इतिहास|पुरातत्व|उत्खनन|धरोहर|शिलालेख|अभिलेख|पुनर्नामकरण|नामकरण|नाम\s*परिवर्तन|ऐतिहासिक|सिंधु\s*घाटी|हड़प्पा|राखीगढ़ी|तंजावुर|चोल|कांस्य|मूर्ति\s*वापसी|प्रयागराज|संभाजीनगर|धाराशिव|विग्रह\s*पुनर्प्राप्ति|संस्कृति|वि-उपनिवेशीकरण/.test(text) ||
+    /\b(heritage|archaeol|excavation|inscription|epigraphy|renam|reclaim|decoloniz|monument|chola|repatriat|harappa|rakhigarhi|sudarshana|rudradaman|ancient|civiliz|antiquity|prayagraj|chhatrapati sambhajinagar|dharashiv|historical name|stolen artifact|restored idol|sculpture)\b/.test(content) ||
+    /asi\s*archaeological|culture\s*&\s*archaeological/.test(source)
+  ) {
+    return 'HERITAGE';
+  }
+
+  // 3. SANSKRIT & SHASTRA (Vedas, Upanishads, Shastras, Manuscripts, Sanskrit Grammar)
+  if (
+    /संस्कृत|वेद|शास्त्र|उपनिषद|संहिता|पांडुलिपि|पाण्डुलिपि|पाणिनी|अष्टाध्यायी|भाष्य|ऋग्वेद|यजुर्वेद|सामवेद|अथर्ववेद|ज्ञान\s*भंडार/.test(text) ||
+    /\b(sanskrit|shastra|vedic|veda|upanishad|samhita|manuscript|panini|ashtadhyayi|vyakarana|bhashya|palm-leaf|samskrita)\b/.test(content) ||
+    /samskrita\s*bharati/.test(source)
+  ) {
+    return 'SANSKRIT';
+  }
+
+  // 4. SCIENCE & TECHNOLOGY (ISRO, Deep Space, Quantum, Computing, AI, Astronomy)
+  if (
+    /विज्ञान|प्रौद्योगिकी|अंतरिक्ष|इसरो|उपग्रह|चंद्रयान|गगनयान|परमाणु|क्वांटम|कृत्रिम\s*बुद्धिमत्ता/.test(text) ||
+    /\b(science|isro|space|satellite|chandrayaan|gaganyaan|payload|quantum|biotech|nanotech|cryogenic|deep space|astronomy|physics|algorithm)\b/.test(content) ||
+    /isro\s*deep\s*space|science,\s*tech/.test(source)
+  ) {
+    return 'SCIENCE';
+  }
+
+  // 5. DEFENSE (Military, Navy, Air Force, DRDO, Strategic Armor)
+  if (
+    /रक्षा|सेना|वायुसेना|नौसेना|सैन्य|मिसाइल|डीआरडीओ|तेजस|पनडुब्बी|लड़ाकू\s*विमान|युद्धपोत|तोपखाना/.test(text) ||
+    /\b(drdo|defense|defence|army|navy|air force|military|missile|tejas|radar|frigate|warship|ammunition|combat|patrol|squadron)\b/.test(content)
+  ) {
+    return 'DEFENSE';
+  }
+
+  // 6. GOVERNANCE (Sovereign Policies, Parliament, National Initiatives)
+  if (
+    /मंत्रालय|कैबिनेट|संसद|नीति\s*आयोग|योजना|विकास|राष्ट्रीय|राजपत्र|अधिनियम|विधेयक|सुशासन/.test(text) ||
+    /\b(governance|cabinet|policy|parliament|reform|ordinance|infrastructure|gazette|ministry|niti aayog|initiative)\b/.test(content)
+  ) {
     return 'GOVERNANCE';
   }
+
+  if (/defense|military/.test(source)) {
+    return 'DEFENSE';
+  }
+
   return 'GENERAL';
 }
 
@@ -162,51 +202,6 @@ async function fetchRssFeed(url) {
   return stdout;
 }
 
-
-async function enrichWithQwen(title, summary) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 35000);
-  try {
-    const prompt = `Title: ${title}
-Summary: ${summary.slice(0, 280)}`;
-    const res = await fetch("http://127.0.0.1:8081/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        messages: [
-          {
-            role: "system",
-            content: "You are SITAVANI sovereign news editor. Output strict JSON with keys title_hi and summary_hi in Hindi Devanagari only."
-          },
-          {
-            role: "user",
-            content: prompt
-          }
-        ],
-        max_tokens: 90,
-        temperature: 0.1
-      }),
-      signal: controller.signal
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const raw = data?.choices?.[0]?.message?.content?.trim() || "";
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (match) {
-      const parsed = JSON.parse(match[0]);
-      return {
-        titleHi: parsed.title_hi ? sanitizeSovereignTerms(parsed.title_hi.trim()) : null,
-        summaryHi: parsed.summary_hi ? sanitizeSovereignTerms(parsed.summary_hi.trim()) : null
-      };
-    }
-  } catch (err) {
-    return null;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-  return null;
-}
-
 export async function runIngestion() {
   const runId = randomUUID();
   const startTime = new Date();
@@ -254,18 +249,10 @@ export async function runIngestion() {
           const sanitizedTitle = sanitizeSovereignTerms(item.title);
           const sanitizedSummary = sanitizeSovereignTerms(item.description || item.title);
 
-          let titleEn = sanitizedTitle;
-          let titleHi = sanitizedTitle;
-          let summaryEn = sanitizedSummary.slice(0, 500);
-          let summaryHi = sanitizedSummary.slice(0, 500);
-
-          try {
-            const enriched = await enrichWithQwen(sanitizedTitle, sanitizedSummary);
-            if (enriched) {
-              if (enriched.titleHi) titleHi = enriched.titleHi;
-              if (enriched.summaryHi) summaryHi = enriched.summaryHi;
-            }
-          } catch (_) {}
+          const titleEn = sanitizedTitle;
+          const titleHi = sanitizedTitle;
+          const summaryEn = sanitizedSummary.slice(0, 500);
+          const summaryHi = sanitizedSummary.slice(0, 500);
 
           const articleId = `art-wire-${Date.now()}-${urlHash.slice(0, 6)}`;
           const now = new Date();
