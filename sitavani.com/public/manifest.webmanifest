@@ -1,0 +1,24 @@
+{
+  "name": "SITAVANI | सीतावाणी",
+  "short_name": "SITAVANI",
+  "description": "Sovereign Attributed News Wire & Civilizational Intelligence",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07080B",
+  "theme_color": "#07080B",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/images/junagadh_rock_sudarshana_dam_1792956730374.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/images/junagadh_rock_sudarshana_dam_1792956730374.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -8,6 +8,8 @@ import LeadHeroStory from '../components/LeadHeroStory.astro';
 import FeaturedGrid from '../components/FeaturedGrid.astro';
 import BharatRenaissanceMap from '../components/BharatRenaissanceMap.astro';
 import FactVsMythDesk from '../components/FactVsMythDesk.astro';
+import BreakingNewsTicker from '../components/BreakingNewsTicker.astro';
+import DailyExecutiveBriefing from '../components/DailyExecutiveBriefing.astro';
 import { DispatchWireIsland } from '../components/DispatchWireIsland';
 import { SocialFeed } from '../components/SocialFeed';
 import { getFeed, getStats } from '../data/store';
@@ -96,6 +98,7 @@ const excludedArticleIds = [heroDispatch?.id, ...featuredDispatches.map((article
 >
   <div class="min-h-screen flex flex-col bg-[#07090E] text-slate-100 font-sans">
     <Header language={language} currentPath="/" isCommunityView={isAkhand} />
+    {!isAkhand && <BreakingNewsTicker articles={wireDispatches.slice(0, 8)} />}
 
     {isAkhand ? (
       /* ========================================================================= */
@@ -306,6 +309,8 @@ const excludedArticleIds = [heroDispatch?.id, ...featuredDispatches.map((article
             </div>
 
             {featuredDispatches.length > 0 && <FeaturedGrid articles={featuredDispatches} language={language} />}
+
+            <DailyExecutiveBriefing articles={dispatches} language={language} />
 
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div class="lg:col-span-2"><BharatRenaissanceMap language={language} /></div>

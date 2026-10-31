@@ -67,6 +67,20 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
   const [editCategory, setEditCategory] = useState<NewsCategory>('HERITAGE');
   const [editNotes, setEditNotes] = useState('');
 
+  // Direct Dispatch Authoring state
+  const [showComposeModal, setShowComposeModal] = useState(false);
+  const [composeTitle, setComposeTitle] = useState('');
+  const [composeTitleHi, setComposeTitleHi] = useState('');
+  const [composeCategory, setComposeCategory] = useState<NewsCategory>('MANDIR');
+  const [composeSalience, setComposeSalience] = useState<'LEAD' | 'FEATURE' | 'WIRE'>('FEATURE');
+  const [composeSummary, setComposeSummary] = useState('');
+  const [composeSummaryHi, setComposeSummaryHi] = useState('');
+  const [composeContent, setComposeContent] = useState('');
+  const [composeImageUrl, setComposeImageUrl] = useState('');
+  const [composeSourceName, setComposeSourceName] = useState('SITAVANI Editorial Desk');
+  const [composeKeywords, setComposeKeywords] = useState('');
+  const [publishingArticle, setPublishingArticle] = useState(false);
+
   const adminRequest = async (url: string, init?: RequestInit) => {
     const response = await fetch(url, { credentials: 'same-origin', ...init });
     const data = await response.json().catch(() => ({}));
@@ -375,6 +389,49 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     }
   };
 
+  const handleCreateDispatch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!composeTitle.trim() || !composeSummary.trim()) {
+      setActionFeedback({ kind: 'error', message: 'Headline and Summary are required to consecrate a dispatch.' });
+      return;
+    }
+    setPublishingArticle(true);
+    setActionFeedback(null);
+    try {
+      const res = await adminRequest('/api/admin/articles/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: composeTitle.trim(),
+          title_hi: composeTitleHi.trim(),
+          category: composeCategory,
+          salience: composeSalience,
+          summary: composeSummary.trim(),
+          summary_hi: composeSummaryHi.trim(),
+          content_raw: composeContent.trim(),
+          image_url: composeImageUrl.trim() || null,
+          source_name: composeSourceName.trim() || 'SITAVANI Editorial Desk',
+          keywords: composeKeywords.split(',').map(k => k.trim()).filter(Boolean)
+        })
+      });
+      setActionFeedback({ kind: 'success', message: `Dispatch consecrated & published! Canonical ID: ${res.article_id}` });
+      setShowComposeModal(false);
+      setComposeTitle('');
+      setComposeTitleHi('');
+      setComposeSummary('');
+      setComposeSummaryHi('');
+      setComposeContent('');
+      setComposeImageUrl('');
+      setComposeKeywords('');
+      await fetchArchive();
+      onRefreshStats?.();
+    } catch (err) {
+      setActionFeedback({ kind: 'error', message: err instanceof Error ? err.message : 'Failed to publish new dispatch.' });
+    } finally {
+      setPublishingArticle(false);
+    }
+  };
+
   const handleTriggerIngest = async () => {
     setRunningIngest(true);
     setActionFeedback(null);
@@ -662,6 +719,15 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
           </div>
 
           <div className="flex items-center flex-wrap gap-2.5">
+            <button
+              type="button"
+              onClick={() => setShowComposeModal(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-bold text-xs uppercase tracking-wider rounded-md hover:brightness-110 transition-all shadow-sm cursor-pointer"
+              title="Author and publish a new sovereign dispatch"
+            >
+              <span>✍️</span>
+              <span>+ लेखं रचय (New Dispatch)</span>
+            </button>
             <a
               href="/news"
               target="_blank"
@@ -1340,6 +1406,180 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 संशोधनं रक्षतु (Save and Approve)
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* New Dispatch Direct Authoring Modal */}
+      {showComposeModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm overflow-y-auto">
+          <div className="relative w-full max-w-3xl rounded-2xl border border-emerald-500/40 bg-[#0C0F17] p-6 sm:p-8 space-y-6 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div className="flex items-center gap-2">
+                <span className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"></span>
+                <h3 className="text-xl font-serif font-bold text-slate-100">
+                  नवीन-लेखनम् · Author New Sovereign Dispatch
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowComposeModal(false)}
+                className="text-slate-400 hover:text-white text-lg p-1 rounded hover:bg-slate-800 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateDispatch} className="space-y-4 text-xs font-mono">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-400 mb-1">Headline (English Canonical) *</label>
+                  <input
+                    type="text"
+                    required
+                    value={composeTitle}
+                    onChange={(e) => setComposeTitle(e.target.value)}
+                    placeholder="e.g. Historic Sanctum Restored at Kashi..."
+                    className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 font-sans focus:border-emerald-500/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Headline (हिन्दी Devanagari)</label>
+                  <input
+                    type="text"
+                    value={composeTitleHi}
+                    onChange={(e) => setComposeTitleHi(e.target.value)}
+                    placeholder="उदा. काशी में प्राचीन गर्भगृह का पुनरुद्धार..."
+                    className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 font-hindi-serif focus:border-emerald-500/50"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-slate-400 mb-1">Dharmic Category *</label>
+                  <select
+                    value={composeCategory}
+                    onChange={(e) => setComposeCategory(e.target.value as NewsCategory)}
+                    className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 font-mono"
+                  >
+                    <option value="MANDIR">MANDIR (मन्दिरम् / Temples)</option>
+                    <option value="HERITAGE">HERITAGE (इतिहासः / Toponyms)</option>
+                    <option value="SANSKRIT">SANSKRIT (संस्कृतम् / Shastras)</option>
+                    <option value="DEFENSE">DEFENSE (रक्षा / Strategic)</option>
+                    <option value="SCIENCE">SCIENCE (विज्ञानम् / Space & Tech)</option>
+                    <option value="GOVERNANCE">GOVERNANCE (शासनम् / Policy)</option>
+                    <option value="NARRATIVE_FACTS">FACT SHIELD (सत्य-शोधनम्)</option>
+                    <option value="GENERAL">GENERAL (सामान्य-वार्ता)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Wire Salience *</label>
+                  <select
+                    value={composeSalience}
+                    onChange={(e) => setComposeSalience(e.target.value as any)}
+                    className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 font-mono"
+                  >
+                    <option value="FEATURE">FEATURE (प्रमुख-स्तम्भः)</option>
+                    <option value="LEAD">LEAD (मुख्य-वार्ता / Headline)</option>
+                    <option value="WIRE">WIRE (तन्त्री-वार्ता / Standard)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Attributed Source</label>
+                  <input
+                    type="text"
+                    value={composeSourceName}
+                    onChange={(e) => setComposeSourceName(e.target.value)}
+                    className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Executive Summary Deck (English) *</label>
+                <textarea
+                  rows={2}
+                  required
+                  value={composeSummary}
+                  onChange={(e) => setComposeSummary(e.target.value)}
+                  placeholder="Concise 1-2 sentence lead synopsis..."
+                  className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 font-sans focus:border-emerald-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Executive Summary Deck (हिन्दी Devanagari)</label>
+                <textarea
+                  rows={2}
+                  value={composeSummaryHi}
+                  onChange={(e) => setComposeSummaryHi(e.target.value)}
+                  placeholder="संक्षिप्त सारसंक्षेप..."
+                  className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 font-hindi-serif focus:border-emerald-500/50"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Full Attributed Report / Body (Markdown)</label>
+                <textarea
+                  rows={6}
+                  value={composeContent}
+                  onChange={(e) => setComposeContent(e.target.value)}
+                  placeholder="Detailed journalistic report..."
+                  className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 font-sans focus:border-emerald-500/50"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-slate-400 mb-1">Image URL</label>
+                  <input
+                    type="text"
+                    value={composeImageUrl}
+                    onChange={(e) => setComposeImageUrl(e.target.value)}
+                    placeholder="/images/... or https://..."
+                    className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 focus:border-emerald-500/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-400 mb-1">Keywords (comma-separated)</label>
+                  <input
+                    type="text"
+                    value={composeKeywords}
+                    onChange={(e) => setComposeKeywords(e.target.value)}
+                    placeholder="mandir, kashi, decolonization, bharat"
+                    className="w-full bg-[#07080B] border border-slate-800 rounded px-3 py-2 text-slate-100 focus:border-emerald-500/50"
+                  />
+                </div>
+              </div>
+
+              {composeImageUrl && (
+                <div className="p-2 rounded bg-black/40 border border-slate-800 flex items-center gap-3">
+                  <img src={composeImageUrl} alt="Preview" className="w-14 h-14 object-cover rounded" />
+                  <span className="text-slate-400 text-[11px] truncate">Image Preview: {composeImageUrl}</span>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowComposeModal(false)}
+                  className="px-4 py-2 border border-slate-700 text-slate-300 text-xs rounded hover:bg-slate-800"
+                >
+                  विराम (Cancel)
+                </button>
+                <button
+                  type="submit"
+                  disabled={publishingArticle}
+                  className="px-6 py-2 bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-bold text-xs uppercase rounded hover:brightness-110 shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                >
+                  {publishingArticle ? 'मुद्रणम् क्रियते (Sealing...)' : 'मुद्रयतु च प्रकाशयतु (Seal & Publish Dispatch) →'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

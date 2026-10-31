@@ -71,6 +71,12 @@ const totalWords = article ? (article.content_raw || article.summary).split(/\s+
 const readingMinutes = Math.max(1, Math.ceil(totalWords / 160));
 
 const discussUrl = article ? `https://akhand.sitavani.com/s/${mappedSabha.slug}?new_post=1&title=${encodeURIComponent(article.title)}&content=${encodeURIComponent(article.summary)}&ref_url=${encodeURIComponent(canonicalUrl)}&sabha=${mappedSabha.slug}` : '/';
+
+const shareTitleText = article ? encodeURIComponent(article.title) : '';
+const shareCanonicalUrl = encodeURIComponent(canonicalUrl);
+const twitterShareUrl = `https://twitter.com/intent/tweet?text=${shareTitleText}&url=${shareCanonicalUrl}`;
+const whatsappShareUrl = `https://api.whatsapp.com/send?text=${shareTitleText}%20${shareCanonicalUrl}`;
+const telegramShareUrl = `https://t.me/share/url?url=${shareCanonicalUrl}&text=${shareTitleText}`;
 ---
 
 <Layout
@@ -174,8 +180,62 @@ const discussUrl = article ? `https://akhand.sitavani.com/s/${mappedSabha.slug}?
                 </a>
               </div>
 
-              {/* Share & Sabha Action Buttons */}
-              <div class="flex items-center gap-2">
+              {/* Share, Font Controls & Sabha Action Buttons */}
+              <div class="flex flex-wrap items-center gap-2">
+                
+                {/* Font Scaling Controls */}
+                <div class="flex items-center rounded-lg bg-slate-900 border border-slate-700 p-0.5 text-xs font-mono">
+                  <button id="font-decrease-btn" class="px-2 py-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors" title="Decrease font size">
+                    A-
+                  </button>
+                  <span class="text-slate-600 px-0.5">|</span>
+                  <button id="font-increase-btn" class="px-2 py-1 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors" title="Increase font size">
+                    A+
+                  </button>
+                </div>
+
+                {/* Focus / Zen Reading Mode Toggle */}
+                <button
+                  id="zen-mode-toggle"
+                  class="px-2.5 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-mono text-slate-300 hover:text-amber-300 flex items-center gap-1 transition-colors"
+                  title="Toggle Zen Focus Reading Mode"
+                >
+                  <span>👁️</span>
+                  <span id="zen-mode-text">Focus</span>
+                </button>
+
+                {/* 1-Click Social Shares */}
+                <div class="flex items-center gap-1">
+                  <a
+                    href={twitterShareUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition-colors"
+                    title="Share on X (Twitter)"
+                  >
+                    <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                  </a>
+                  <a
+                    href={whatsappShareUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-emerald-400 transition-colors"
+                    title="Share on WhatsApp"
+                  >
+                    <span class="text-xs">💬</span>
+                  </a>
+                  <a
+                    href={telegramShareUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-slate-300 hover:text-cyan-400 transition-colors"
+                    title="Share on Telegram"
+                  >
+                    <span class="text-xs">✈️</span>
+                  </a>
+                </div>
+
+                {/* Copy Link Button */}
                 <button
                   id="copy-dispatch-btn"
                   data-url={canonicalUrl}
@@ -184,6 +244,8 @@ const discussUrl = article ? `https://akhand.sitavani.com/s/${mappedSabha.slug}?
                   <span id="copy-btn-icon">🔗</span>
                   <span id="copy-btn-text">Share Link</span>
                 </button>
+
+                {/* Sabha Debate Bridge */}
                 <a
                   href={discussUrl}
                   class="px-3 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs font-mono font-bold flex items-center gap-1.5 transition-colors"
@@ -329,9 +391,12 @@ const discussUrl = article ? `https://akhand.sitavani.com/s/${mappedSabha.slug}?
                   </span>
                   <div class="flex flex-wrap gap-1.5">
                     {article.matched_keywords.map((kw: string) => (
-                      <span class="px-2.5 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-amber-300 text-[11px]">
+                      <a
+                        href={`/search?q=${encodeURIComponent(kw)}`}
+                        class="px-2.5 py-0.5 rounded-md bg-slate-900 border border-slate-800 hover:border-amber-500/50 hover:bg-slate-800 text-amber-300 hover:text-amber-200 text-[11px] transition-colors"
+                      >
                         #{kw}
-                      </span>
+                      </a>
                     ))}
                   </div>
                 </div>
@@ -503,6 +568,44 @@ const discussUrl = article ? `https://akhand.sitavani.com/s/${mappedSabha.slug}?
             }, 2500);
           }
         } catch (_) {}
+      });
+    }
+
+    // Font Scaling
+    const prose = document.querySelector('.prose');
+    let currentScale = 1;
+    const fontSizes = ['text-base', 'text-lg', 'text-xl', 'text-2xl'];
+    const fontIncBtn = document.getElementById('font-increase-btn');
+    const fontDecBtn = document.getElementById('font-decrease-btn');
+
+    if (prose && fontIncBtn && fontDecBtn) {
+      fontIncBtn.addEventListener('click', () => {
+        if (currentScale < fontSizes.length - 1) {
+          prose.classList.remove(fontSizes[currentScale]);
+          currentScale++;
+          prose.classList.add(fontSizes[currentScale]);
+        }
+      });
+      fontDecBtn.addEventListener('click', () => {
+        if (currentScale > 0) {
+          prose.classList.remove(fontSizes[currentScale]);
+          currentScale--;
+          prose.classList.add(fontSizes[currentScale]);
+        }
+      });
+    }
+
+    // Zen Focus Mode Toggle
+    const zenToggle = document.getElementById('zen-mode-toggle');
+    const zenText = document.getElementById('zen-mode-text');
+    let isZen = false;
+    if (zenToggle && zenText) {
+      zenToggle.addEventListener('click', () => {
+        isZen = !isZen;
+        document.body.classList.toggle('zen-focus-active', isZen);
+        zenText.textContent = isZen ? 'Exit Focus' : 'Focus';
+        zenToggle.classList.toggle('border-amber-400', isZen);
+        zenToggle.classList.toggle('bg-amber-500/20', isZen);
       });
     }
 

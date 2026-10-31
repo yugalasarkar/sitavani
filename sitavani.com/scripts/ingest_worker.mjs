@@ -69,9 +69,9 @@ function determineCategory(text, sourceName = '') {
 
   // 1. MANDIR (Sacred Sanatan Geography, Temples, Kunds, Pilgrimage, Pujas, Deities)
   if (
-    /मंदिर|मन्दिर|तीर्थ|देवस्थान|गर्भगृह|परिक्रमा|कुण्ड|घाट|पुजारी|महादेव|शिवलिंग|दर्शन|आरती|विष्णु|दुर्गा|हनुमान|रामलला|सोमनाथ|केदारनाथ|बद्रीनाथ|काशी\s*विश्वनाथ|अयोध्या|महाकाल|उज्जैन|मीनाक्षी|तिरुपति|जगन्नाथ|द्वारका|श्रद्धालु|आध्यात्मिक/.test(text) ||
-    /\b(mandir|temple|tirth|tirtha|devasthan|sanctum|parikrama|kund|ghat|puja|deity|kashi vishwanath|ayodhya|ram mandir|somnath|kedarnath|badrinath|mahakal|tirupati|jagannath|garbhagriha|pilgrimage|sacred shrine|jyotirlinga)\b/.test(content) ||
-    /temple\s*connect|sanatan\s*wires|dharmik/.test(source)
+    /मंदिर|मन्दिर|तीर्थ|देवस्थान|गर्भगृह|परिक्रमा|कुण्ड|घाट|पुजारी|महादेव|शिवलिंग|दर्शन|आरती|विष्णु|दुर्गा|हनुमान|रामलला|सोमनाथ|केदारनाथ|बद्रीनाथ|काशी\s*विश्वनाथ|अयोध्या|महाकाल|उज्जैन|मीनाक्षी|तिरुपति|जगन्नाथ|द्वारका|श्रद्धालु|आध्यात्मिक|विग्रह/.test(text) ||
+    /\b(mandir|temple|tirth|tirtha|devasthan|sanctum|parikrama|kund|ghat|puja|deity|kashi vishwanath|ayodhya|ram mandir|somnath|kedarnath|badrinath|mahakal|tirupati|jagannath|garbhagriha|pilgrimage|sacred shrine|jyotirlinga|murti|shiva temple)\b/.test(content) ||
+    /sanatan\s*board|temple\s*connect|sanatan\s*wires|dharmik/.test(source)
   ) {
     return 'MANDIR';
   }
@@ -83,6 +83,15 @@ function determineCategory(text, sourceName = '') {
     /asi\s*archaeological|culture\s*&\s*archaeological/.test(source)
   ) {
     return 'HERITAGE';
+  }
+
+  // 3. NARRATIVE_FACTS (Fact-checking anti-Hindu bias, Debunking Myths, Countering Propaganda, Halal/Waqf investigations)
+  if (
+    /भ्रम|तथ्य|सत्य|झूठ|खंडन|पर्दाफाश|षड्यंत्र|विरोधी|दोगलापन/.test(text) ||
+    /\b(busting|myth|bias|fact-check|investigation|unmask|exposed|propaganda|anti-hindu|hinduphobia|halal|waqf|conversion|jihad|blasphemy)\b/.test(content) ||
+    (/opindia|hindujagruti|hjs|hindupost/.test(source) && /bias|hate|unmask|exposed|attack|clash|controversy|protest/.test(content))
+  ) {
+    return 'NARRATIVE_FACTS';
   }
 
   // 3. SANSKRIT & SHASTRA (Vedas, Upanishads, Shastras, Manuscripts, Sanskrit Grammar)

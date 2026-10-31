@@ -1,0 +1,114 @@
+---
+import type { Article } from '../types';
+import { getFeed } from '../data/store';
+
+interface Props {
+  articles?: Article[];
+}
+
+let { articles } = Astro.props;
+
+if (!articles || articles.length === 0) {
+  try {
+    const feed = await getFeed(undefined, undefined, 6);
+    articles = feed.articles || [];
+  } catch (err) {
+    articles = [];
+  }
+}
+
+const CATEGORY_COLORS: Record<string, string> = {
+  MANDIR: 'text-orange-400 border-orange-500/30 bg-orange-500/10',
+  HERITAGE: 'text-amber-400 border-amber-500/30 bg-amber-500/10',
+  SANSKRIT: 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
+  DEFENSE: 'text-rose-400 border-rose-500/30 bg-rose-500/10',
+  SCIENCE: 'text-cyan-400 border-cyan-500/30 bg-cyan-500/10',
+  GOVERNANCE: 'text-purple-400 border-purple-500/30 bg-purple-500/10',
+  NARRATIVE_FACTS: 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10',
+  GENERAL: 'text-slate-300 border-slate-700 bg-slate-800/50'
+};
+---
+
+{articles && articles.length > 0 && (
+  <aside aria-label="Breaking Wire Ticker" class="border-b border-amber-950/40 bg-gradient-to-r from-[#0C0E16] via-[#090B10] to-[#0C0E16] text-xs font-mono select-none overflow-hidden">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2 flex items-center gap-3">
+      
+      {/* Live Badge */}
+      <div class="flex items-center gap-2 shrink-0 bg-red-950/60 border border-red-500/40 text-red-300 px-2.5 py-1 rounded-md shadow-sm">
+        <span class="relative flex h-2 w-2">
+          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+          <span class="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+        </span>
+        <span class="font-bold tracking-wider text-[11px] uppercase">
+          सद्यः-वार्ता <span class="text-red-400 font-normal">· LIVE WIRE</span>
+        </span>
+      </div>
+
+      {/* Marquee / Ticker Scroll */}
+      <div class="relative flex-1 overflow-hidden whitespace-nowrap mask-radial-edges">
+        <div class="inline-flex gap-8 items-center animate-ticker hover:[animation-play-state:paused]">
+          {articles.map((art) => (
+            <a
+              href={`/articles/${art.id}`}
+              class="inline-flex items-center gap-2 text-slate-300 hover:text-amber-300 transition-colors group shrink-0"
+            >
+              <span class={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold border ${CATEGORY_COLORS[art.category] || CATEGORY_COLORS.GENERAL}`}>
+                {art.category}
+              </span>
+              <span class="text-xs font-serif font-medium group-hover:underline underline-offset-2">
+                {art.title}
+              </span>
+              <span class="text-slate-600 text-[10px]">·</span>
+            </a>
+          ))}
+          {/* Duplicate loop for seamless continuous scrolling */}
+          {articles.map((art) => (
+            <a
+              href={`/articles/${art.id}`}
+              class="inline-flex items-center gap-2 text-slate-300 hover:text-amber-300 transition-colors group shrink-0"
+            >
+              <span class={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold border ${CATEGORY_COLORS[art.category] || CATEGORY_COLORS.GENERAL}`}>
+                {art.category}
+              </span>
+              <span class="text-xs font-serif font-medium group-hover:underline underline-offset-2">
+                {art.title}
+              </span>
+              <span class="text-slate-600 text-[10px]">·</span>
+            </a>
+          ))}
+        </div>
+      </div>
+
+      {/* Direct RSS Pill */}
+      <div class="hidden md:flex items-center gap-2 shrink-0 border-l border-slate-800 pl-3">
+        <a
+          href="/rss.xml"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 hover:underline"
+          title="SITAVANI News Wire RSS 2.0 Feed"
+        >
+          <span>📡</span>
+          <span>RSS 2.0</span>
+        </a>
+      </div>
+
+    </div>
+  </aside>
+)}
+
+<style>
+  @keyframes ticker {
+    0% {
+      transform: translateX(0%);
+    }
+    100% {
+      transform: translateX(-50%);
+    }
+  }
+
+  .animate-ticker {
+    display: inline-flex;
+    animation: ticker 42s linear infinite;
+  }
+</style>
