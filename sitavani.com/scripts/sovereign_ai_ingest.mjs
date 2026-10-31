@@ -141,12 +141,14 @@ function isDeepCivilizationalNews(text, sourceName) {
     return false;
   }
 
-  // Mandatory Sanatan / Bhartiya / Civilisational / Sovereign triggers
-  return (
-    /मंदिर|मन्दिर|तीर्थ|विग्रह|मूर्ति|उत्खनन|पुरातत्व|काशी|अयोध्या|प्रयागराज|संभाजीनगर|धाराशिव|संस्कृति|धर्म|वेद|शास्त्र|धर्मांतरण|वक्फ|हलाल|पुनर्नामकरण|गोरक्षा|हम्पी|भोजशाला|मथुरा|ज्ञानवापी|राष्ट्रवाद|स्वाभिमान|सत्य|सोमनाथ|शबरीमाला/.test(text) ||
-    /\b(mandir|temple|vigraha|murti|sanatana|dharma|hindutva|asi|archaeol|excavation|kashi|ayodhya|mathura|gyanvapi|bhojshala|reclaim|renam|decoloniz|waqf|halal|conversion|cow protection|heritage|inscriptions|shastras|sanskrit|vedas|upanishad|sovereignty|geopolitic|defense|indigenous|isro|somnath|sabarimala)\b/.test(combined) ||
-    /opindia|hindupost|newsbharati|hindu janajagruti|sanatan prabhat|organiser|panchjanya|swarajya|temple connect/.test(sourceName.toLowerCase())
-  );
+  // 3. MANDATORY BHARAT-FIRST CIVILISATIONAL RULE:
+  // Must strictly belong to the sacred geography, civilization, security, and heritage of Bhārat
+  const hasDevanagariTriggers = /भारत|सनातन|धर्म|हिंदू|हिन्दू|मंदिर|मन्दिर|तीर्थ|विग्रह|मूर्ति|उत्खनन|पुरातत्व|काशी|अयोध्या|प्रयागराज|संभाजीनगर|धाराशिव|संस्कृति|वेद|शास्त्र|धर्मांतरण|वक्फ|हलाल|पुनर्नामकरण|गोरक्षा|हम्पी|भोजशाला|मथुरा|ज्ञानवापी|राष्ट्रवाद|स्वाभिमान|सत्य|सोमनाथ|शबरीमाला|असम|कश्मीर|उत्तराखंड|गुजरात|महाराष्ट्र|तमिलनाडु|केरल|उत्तर\s*प्रदेश/.test(text);
+
+  const hasEnglishTriggers = /\b(bharat|bhārat|sanatana|sanātana|dharma|dharmic|hindu|hindutva|mandir|temple|tirth|tirtha|vigraha|murti|deity|ayodhya|kashi|varanasi|mathura|gyanvapi|bhojshala|somnath|sabarimala|prayagraj|chhatrapati sambhajinagar|dharashiv|asi|archaeol|excavation|vedas|vedic|upanishad|sanskrit|shastras|hampi|decoloniz|reclaim|ram mandir|waqf|halal|conversion|cow protection|drdo|isro|iaf|ins |indian navy|indian army|assam|kashmir|uttarakhand|gujarat|maharashtra|tamil nadu|kerala|uttar pradesh|supreme court of india|cji)\b/.test(combined);
+
+  // If it is not explicitly anchored in Bhārat or Sanātana Dharma, REJECT unconditionally!
+  return hasDevanagariTriggers || hasEnglishTriggers;
 }
 
 function determineCategory(text, sourceName = '') {
