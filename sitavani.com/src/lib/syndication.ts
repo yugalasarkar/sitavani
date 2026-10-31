@@ -11,6 +11,7 @@ export interface ArticleBroadcastPayload {
   category: string;
   source_name?: string;
   original_url?: string;
+  image_url?: string | null;
 }
 
 export interface BroadcastResult {
@@ -18,6 +19,32 @@ export interface BroadcastResult {
   channel?: string;
   message_id?: number;
   error?: string;
+}
+
+function stripAllHtml(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function escapeTelegramHtml(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
 }
 
 export async function broadcastToTelegram(article: ArticleBroadcastPayload): Promise<BroadcastResult> {
@@ -29,31 +56,66 @@ export async function broadcastToTelegram(article: ArticleBroadcastPayload): Pro
     return { success: false, error: 'Telegram credentials missing' };
   }
 
-  // Format clean headline and text
   const siteUrl = 'https://sitavani.com';
   const articleUrl = `${siteUrl}/articles/${article.id}`;
 
-  const cleanTitle = (article.title || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const cleanTitleHi = (article.title_hi || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const cleanSummary = (article.summary || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').slice(0, 700);
-  const cleanSource = (article.source_name || 'Sitavani Sovereign Wire').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const cleanTitle = escapeTelegramHtml(stripAllHtml(article.title));
+  const rawTitleHi = stripAllHtml(article.title_hi || '');
+  const cleanTitleHi = rawTitleHi && rawTitleHi !== stripAllHtml(article.title) ? escapeTelegramHtml(rawTitleHi) : '';
 
-  const messageText = [
+  let rawSummary = stripAllHtml(article.summary || '');
+  // Prevent duplicate headline repetition in summary
+  if (rawSummary.startsWith(stripAllHtml(article.title))) {
+    rawSummary = rawSummary.slice(stripAllHtml(article.title).length).replace(/^[\s:—–-]+/, '').trim();
+  }
+  if (!rawSummary || rawSummary.length < 20) {
+    rawSummary = `High-priority sovereign intelligence dispatch verified via ${article.source_name || 'Bhartiya Corridors'}. Full canonical reporting and scriptural documentation available on Sitavani.`;
+  }
+
+  const cleanSummary = escapeTelegramHtml(rawSummary).slice(0, 700);
+  const cleanSource = escapeTelegramHtml(article.source_name || 'Sitavani Sovereign Wire');
+
+  const captionText = [
     `🚩 <b>सनातन विजय · SANĀTANA VIJAYA</b>`,
     ``,
     `🏛 <b>${cleanTitle}</b>`,
     cleanTitleHi ? `<i>${cleanTitleHi}</i>` : '',
     ``,
-    `📜 <b>सारसंक्षेपः · Executive Dispatch:</b>`,
+    `📜 <b>सारसंक्षेपः · Sovereign Intelligence Brief:</b>`,
     cleanSummary,
     ``,
     `📍 <b>Category:</b> #${article.category}  |  <b>Source:</b> ${cleanSource}`,
-    `🔗 <a href="${articleUrl}">वाचनम् · Read Full Sovereign Dispatch ↗</a>`,
+    `🔗 <a href="${articleUrl}">वाचनम् · Read Full Sovereign Dispatch on Sitavani ↗</a>`,
     ``,
     `#SanatanDharma #Bharat #Hindutva #Mandir #Sitavani #DharmaRaksha`
   ].filter(line => line !== '').join('\n');
 
   try {
+    // If an image URL is present, try sendPhoto first for rich visual wire presentation
+    if (article.image_url && article.image_url.startsWith('http')) {
+      try {
+        const photoRes = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: chatId,
+            photo: article.image_url,
+            caption: captionText.slice(0, 1024),
+            parse_mode: 'HTML'
+          })
+        });
+        const photoData = await photoRes.json();
+        if (photoData.ok) {
+          console.log(`[Syndication] Broadcasted with Photo to Telegram ${chatId} (msg: ${photoData.result.message_id})`);
+          return { success: true, channel: chatId, message_id: photoData.result.message_id };
+        }
+        console.warn('[Syndication] sendPhoto failed, falling back to sendMessage:', photoData.description);
+      } catch (photoErr) {
+        console.warn('[Syndication] sendPhoto network error, falling back to sendMessage');
+      }
+    }
+
+    // Default text message broadcast
     const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
       headers: {
@@ -61,7 +123,7 @@ export async function broadcastToTelegram(article: ArticleBroadcastPayload): Pro
       },
       body: JSON.stringify({
         chat_id: chatId,
-        text: messageText,
+        text: captionText,
         parse_mode: 'HTML',
         disable_web_page_preview: false
       })

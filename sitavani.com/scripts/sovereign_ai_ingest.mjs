@@ -6,7 +6,7 @@ import path from 'node:path';
 
 const { Pool } = pg;
 
-// Load environment variables if needed
+// Load environment variables
 if (!process.env.DATABASE_URL) {
   try {
     const envPath = path.resolve(process.cwd(), '.env');
@@ -100,27 +100,24 @@ function cleanHtml(html) {
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 
-  // Strip all tags now that entities are decoded
   str = str.replace(/<[^>]*>/g, ' ');
   return str.replace(/\s+/g, ' ').trim();
 }
 
-function isDeepCivilizationalNews(text, sourceName) {
-  const combined = `${text} ${sourceName}`.toLowerCase();
-  
-  // Exclude trivial bureaucratic/commercial noise
-  if (
-    /postal stamp|commemorative stamp|audit manual|spectrum auction|gst circular|customs duty on|filing return|tender notice|telecom license/.test(combined)
-  ) {
-    return false;
-  }
+function extractImageUrl(itemBlock) {
+  // 1. media:content or media:thumbnail
+  const mediaMatch = itemBlock.match(/<media:(?:content|thumbnail)[^>]+url=["']([^"']+)["']/i);
+  if (mediaMatch && mediaMatch[1] && mediaMatch[1].startsWith('http')) return mediaMatch[1];
 
-  // Mandatory Sanatan / Civilisational / Hindutva / Sovereign triggers
-  return (
-    /मंदिर|मन्दिर|तीर्थ|विग्रह|मूर्ति|उत्खनन|पुरातत्व|काशी|अयोध्या|प्रयागराज|संभाजीनगर|धाराशिव|संस्कृति|धर्म|वेद|शास्त्र|धर्मांतरण|वक्फ|हलाल|पुनर्नामकरण|गोरक्षा|हम्पी|भोजशाला|मथुरा|ज्ञानवापी|राष्ट्रवाद|स्वाभिमान|सत्य/.test(text) ||
-    /\b(mandir|temple|vigraha|murti|sanatana|dharma|hindutva|asi|archaeol|excavation|kashi|ayodhya|mathura|gyanvapi|bhojshala|reclaim|renam|decoloniz|waqf|halal|conversion|cow protection|heritage|inscriptions|shastras|sanskrit|vedas|upanishad|sovereignty|geopolitic|defense|indigenous|isro)\b/.test(combined) ||
-    /opindia|hindupost|newsbharati|hindu janajagruti|sanatan prabhat|organiser|panchjanya|swarajya|temple connect/.test(sourceName.toLowerCase())
-  );
+  // 2. enclosure
+  const encMatch = itemBlock.match(/<enclosure[^>]+url=["']([^"']+)["'][^>]*type=["']image/i) || itemBlock.match(/<enclosure[^>]+url=["']([^"']+)["']/i);
+  if (encMatch && encMatch[1] && encMatch[1].startsWith('http')) return encMatch[1];
+
+  // 3. img tag in description or content
+  const imgMatch = itemBlock.match(/<img[^>]+src=["']([^"']+)["']/i);
+  if (imgMatch && imgMatch[1] && imgMatch[1].startsWith('http')) return imgMatch[1];
+
+  return null;
 }
 
 function determineCategory(text, sourceName = '') {
@@ -128,8 +125,8 @@ function determineCategory(text, sourceName = '') {
   const source = (sourceName || '').toLowerCase();
 
   if (
-    /मंदिर|मन्दिर|तीर्थ|देवस्थान|गर्भगृह|परिक्रमा|कुण्ड|घाट|पुजारी|महादेव|शिवलिंग|दर्शन|आरती|विष्णु|दुर्गा|हनुमान|रामलला|सोमनाथ|केदारनाथ|बद्रीनाथ|काशी\s*विश्वनाथ|अयोध्या|महाकाल|उज्जैन|मीनाक्षी|तिरुपति|जगन्नाथ|द्वारका|श्रद्धालु|आध्यात्मिक|विग्रह/.test(text) ||
-    /\b(mandir|temple|tirth|tirtha|devasthan|sanctum|parikrama|kund|ghat|puja|deity|kashi vishwanath|ayodhya|ram mandir|somnath|kedarnath|badrinath|mahakal|tirupati|jagannath|garbhagriha|pilgrimage|sacred shrine|jyotirlinga|murti|shiva temple|krishna janmabhoomi|gyanvapi)\b/.test(content) ||
+    /मंदिर|मन्दिर|तीर्थ|देवस्थान|गर्भगृह|परिक्रमा|कुण्ड|घाट|पुजारी|महादेव|शिवलिंग|दर्शन|आरती|विष्णु|दुर्गा|हनुमान|रामलला|सोमनाथ|केदारनाथ|बद्रीनाथ|काशी\s*विश्वनाथ|अयोध्या|महाकाल|उज्जैन|मीनाक्षी|तिरुपति|जगन्नाथ|द्वारका|श्रद्धालु|आध्यात्मिक|विग्रह|सबरीमाला/.test(text) ||
+    /\b(mandir|temple|tirth|tirtha|sabarimala|devasthan|sanctum|parikrama|kund|ghat|puja|deity|kashi vishwanath|ayodhya|ram mandir|somnath|kedarnath|badrinath|mahakal|tirupati|jagannath|garbhagriha|pilgrimage|sacred shrine|jyotirlinga|murti|shiva temple|krishna janmabhoomi|gyanvapi)\b/.test(content) ||
     /sanatan\s*board|temple\s*connect|sanatan\s*wires|hindujagruti/.test(source)
   ) {
     return 'MANDIR';
@@ -143,9 +140,9 @@ function determineCategory(text, sourceName = '') {
   }
 
   if (
-    /भ्रम|तथ्य|सत्य|झूठ|खंडन|पर्दाफाश|षड्यंत्र|विरोधी|दोगलापन|धर्मांतरण|वक्फ|हलाल/.test(text) ||
-    /\b(busting|myth|bias|fact-check|investigation|propaganda|fake news|halal|waqf|conversion syndicate|truth behind|exposed|narrative)\b/.test(content) ||
-    /opindia/.test(source)
+    /भ्रम|तथ्य|सत्य|झूठ|खंडन|पर्दाफाश|षड्यंत्र|विरोधी|दोगलापन|धर्मांतरण|वक्फ|हलाल|विवाद|अदालत/.test(text) ||
+    /\b(busting|myth|bias|fact-check|investigation|propaganda|fake news|halal|waqf|conversion syndicate|truth behind|exposed|narrative|controversy|court|bench|cji)\b/.test(content) ||
+    /opindia|hindupost/.test(source)
   ) {
     return 'NARRATIVE_FACTS';
   }
@@ -168,33 +165,42 @@ function determineCategory(text, sourceName = '') {
   return 'GOVERNANCE';
 }
 
-function synthesizeSovereignDispatch(title, rawSummary, category, sourceName) {
+function synthesizeSovereignDispatch(title, rawSummary, rawContent, category, sourceName) {
   let cleanedTitle = cleanHtml(title);
-  cleanedTitle = cleanedTitle.replace(/\s*-\s*(OpIndia|HinduPost|NewsBharati|Hindu Janajagruti Samiti|Sanatan Prabhat|Organiser|Panchjanya|Swarajya).*$/i, '').trim();
+  cleanedTitle = cleanedTitle.replace(/\s*-\s*(OpIndia|HinduPost|NewsBharati|Hindu Janajagruti Samiti|Sanatan Prabhat|Organiser|Panchjanya|Swarajya|BJP).*$/i, '').trim();
 
   let cleanedSummary = cleanHtml(rawSummary);
-  cleanedSummary = cleanedSummary.replace(/\s*-\s*(OpIndia|HinduPost|NewsBharati|Hindu Janajagruti Samiti|Sanatan Prabhat|Organiser|Panchjanya|Swarajya).*$/i, '').trim();
+  cleanedSummary = cleanedSummary.replace(/\s*-\s*(OpIndia|HinduPost|NewsBharati|Hindu Janajagruti Samiti|Sanatan Prabhat|Organiser|Panchjanya|Swarajya|BJP).*$/i, '').trim();
+
+  let cleanedBody = cleanHtml(rawContent || rawSummary);
 
   const decolonizedTitle = decolonizeText(cleanedTitle);
   let decolonizedSummary = decolonizeText(cleanedSummary);
 
-  if (!decolonizedSummary || decolonizedSummary.length < 40 || decolonizedSummary === decolonizedTitle) {
-    decolonizedSummary = `${decolonizedTitle}. High-priority sovereign intelligence dispatch verified via ${sourceName}, substantiating the unyielding resurgence of Sanātana Dharma and the civilisational integrity of Bhārat.`;
+  // If summary was just the headline, use the first 400 chars of body
+  if (!decolonizedSummary || decolonizedSummary.length < 50 || decolonizedSummary === decolonizedTitle) {
+    if (cleanedBody && cleanedBody.length > 80 && cleanedBody !== decolonizedTitle) {
+      decolonizedSummary = decolonizeText(cleanedBody.slice(0, 480));
+    } else {
+      decolonizedSummary = `Official sovereign civilisational dispatch on ${decolonizedTitle}. Sourced and verified via ${sourceName}. The report underscores ongoing judicial, institutional, and grassroots resurgence safeguarding Sanātana Dharma traditions across Bhāratavarsha.`;
+    }
   }
 
-  // Generate Devanagari headline equivalent
-  let devanagariPrefix = 'सनातन सार्वभौमत्वम्';
-  if (category === 'MANDIR') devanagariPrefix = 'मन्दिर-मुक्ति-वार्ता';
-  else if (category === 'HERITAGE') devanagariPrefix = 'सभ्यतागत-पुनरुत्थानम्';
-  else if (category === 'NARRATIVE_FACTS') devanagariPrefix = 'सत्य-शोधनम् · धर्म-रक्षा';
-  else if (category === 'DEFENSE') devanagariPrefix = 'राष्ट्र-रक्षा · अजेय-भारतम्';
-  else if (category === 'SANSKRIT') devanagariPrefix = 'वैदिक-शास्त्रीय-प्रवाहः';
+  // Devanagari prefix & title
+  let devPrefix = 'सनातन-सार्वभौमत्वम्';
+  if (category === 'MANDIR') devPrefix = 'मन्दिर-मुक्ति एवं परम्परा-रक्षा';
+  else if (category === 'HERITAGE') devPrefix = 'सभ्यतागत-पुनरुत्थानम्';
+  else if (category === 'NARRATIVE_FACTS') devPrefix = 'सत्य-शोधनम् · धर्म-रक्षा';
+  else if (category === 'DEFENSE') devPrefix = 'राष्ट्र-रक्षा · अजेय-भारतम्';
+  else if (category === 'SANSKRIT') devPrefix = 'वैदिक-शास्त्रीय-प्रवाहः';
 
   const titleEn = decolonizedTitle.length > 250 ? decolonizedTitle.slice(0, 247) + '...' : decolonizedTitle;
-  const titleHi = `${devanagariPrefix}: ${decolonizedTitle}`.slice(0, 290);
+  const titleHi = `${devPrefix}: ${decolonizedTitle}`.slice(0, 290);
 
-  const summaryEn = decolonizedSummary.slice(0, 480);
-  const summaryHi = `सनातन धर्म एवं भारत के सभ्यतागत संप्रभुता के अंतर्गत: ${decolonizedSummary}`.slice(0, 480);
+  const summaryEn = decolonizedSummary.slice(0, 490);
+  const summaryHi = `सनातन धर्म एवं भारत के संप्रभुता-हित में: ${decolonizedSummary}`.slice(0, 490);
+
+  const bodyExcerpt = cleanedBody.length > 300 ? cleanedBody : decolonizedSummary;
 
   const contentRaw = `### सारसंक्षेपः · Executive Dispatch Synopsis
 
@@ -203,6 +209,8 @@ ${decolonizedSummary}
 ---
 
 ### सभ्यतागत-विजयः · Civilisational Resurgence & Sovereignty
+
+${bodyExcerpt}
 
 In the unfolding era of Sanātana resurgence, Bhārat stands firmly as an unapologetic, sovereign civilisational superpower (*Vishwaguru*). The developments reported via **${sourceName}** directly substantiate the continuous reclamation of sacred space, judicial verification of Vedic antiquity, and the systematic dismantling of colonial and secularist distortions.
 
@@ -265,13 +273,16 @@ function parseFeedItems(xml) {
     const titleMatch = itemBlock.match(/<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i);
     const linkMatch = itemBlock.match(/<link(?:\s[^>]*)?>([\s\S]*?)<\/link>/i) || itemBlock.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i);
     const descMatch = itemBlock.match(/<description(?:\s[^>]*)?>([\s\S]*?)<\/description>/i);
+    const contentMatch = itemBlock.match(/<content:encoded(?:\s[^>]*)?>([\s\S]*?)<\/content:encoded>/i);
 
     const title = cleanHtml(titleMatch ? titleMatch[1] : '');
     const link = (linkMatch ? linkMatch[1] : '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim();
     const description = cleanHtml(descMatch ? descMatch[1] : '');
+    const content = cleanHtml(contentMatch ? contentMatch[1] : description);
+    const imageUrl = extractImageUrl(itemBlock);
 
     if (title && link) {
-      items.push({ title, link, description });
+      items.push({ title, link, description, content, imageUrl });
     }
   }
   return items;
@@ -291,7 +302,7 @@ export async function runSovereignCycle() {
       [runId]
     );
 
-    // Fetch only active right-wing & Sanatan sources
+    // Fetch active sources
     const sourcesRes = await client.query(
       `SELECT id, name, base_url, rss_endpoint FROM sources WHERE is_active = TRUE ORDER BY id ASC`
     );
@@ -312,30 +323,25 @@ export async function runSovereignCycle() {
           const exists = await client.query('SELECT 1 FROM articles WHERE url_hash = $1', [urlHash]);
           if (exists.rows.length > 0) continue;
 
-          // Check if it is a deep civilizational story
-          const combined = `${item.title} ${item.description}`;
-          if (!isDeepCivilizationalNews(combined, source.name)) {
-            continue;
-          }
-
+          const combined = `${item.title} ${item.description} ${item.content}`;
           const category = determineCategory(combined, source.name);
-          const dispatch = synthesizeSovereignDispatch(item.title, item.description || item.title, category, source.name);
+          const dispatch = synthesizeSovereignDispatch(item.title, item.description, item.content, category, source.name);
 
           const articleId = `art-sov-${Date.now()}-${urlHash.slice(0, 6)}`;
           const now = new Date();
 
-          // Insert into PENDING status for admin 1-click approval!
+          // Insert into PENDING status for admin 1-click approval
           await client.query(
             `INSERT INTO articles (
               id, source_id, source_name, original_url, url_hash,
               title, title_hi, summary, summary_hi, content_raw,
-              category, status, salience,
+              image_url, category, status, salience,
               created_at, updated_at, matched_keywords
             ) VALUES (
               $1, $2, $3, $4, $5,
               $6, $7, $8, $9, $10,
-              $11, 'PENDING', 'FEATURE',
-              $12, $12, $13
+              $11, $12, 'PENDING', 'FEATURE',
+              $13, $13, $14
             )`,
             [
               articleId,
@@ -348,6 +354,7 @@ export async function runSovereignCycle() {
               dispatch.summaryEn,
               dispatch.summaryHi,
               dispatch.contentRaw,
+              item.imageUrl || null,
               category,
               now,
               ['sanatana', 'sovereign', 'dharma', category.toLowerCase(), 'vishwaguru']
@@ -357,14 +364,13 @@ export async function runSovereignCycle() {
           totalPendingAdded++;
           console.log(`  [+] Queued for Approval [${category}]: ${dispatch.titleEn.slice(0, 65)}...`);
 
-          // Rate limit: add maximum 3 deep articles per source per cycle to avoid flooding
           if (totalPendingAdded >= 5) break;
         }
 
         await client.query('UPDATE sources SET last_polled_at = NOW() WHERE id = $1', [source.id]);
 
         if (totalPendingAdded >= 5) {
-          console.log(`[Limit] Reached maximum 5 deep dispatches for this cycle.`);
+          console.log(`[Limit] Reached 5 deep dispatches for this cycle.`);
           break;
         }
 

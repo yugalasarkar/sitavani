@@ -1,27 +1,51 @@
 ---
-import type { DisplayLanguage, FeedStats } from '../types';
+import type { DisplayLanguage, FeedStats, Article } from '../types';
 
 interface Props {
   language?: DisplayLanguage;
   stats: FeedStats;
+  latestArticle?: Article;
 }
 
-const { language = 'dual', stats } = Astro.props;
+const { language = 'dual', stats, latestArticle } = Astro.props;
 ---
 
-<section aria-labelledby="pulse-title" class="bg-[#090C12] border-y border-amber-950/40 py-4 px-4 rounded-lg">
+<section aria-labelledby="pulse-title" class="bg-[#090C12] border-y border-amber-950/40 py-3.5 px-4 rounded-lg">
   <div class="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-    <div class="flex items-center gap-3">
-      <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+    <div class="flex items-center gap-3 shrink-0">
+      <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
       <div>
-        <h2 id="pulse-title" class="font-brand font-bold text-amber-400 uppercase tracking-widest text-xs">{language === 'hi' ? 'भारत शक्ति पल्स' : 'Bharat Shakti Pulse'}</h2>
-        <p class="text-[10px] text-slate-500 font-mono">Sourced milestones</p>
+        <h2 id="pulse-title" class="font-brand font-bold text-amber-400 uppercase tracking-widest text-xs">
+          {language === 'hi' ? 'भारत शक्ति पल्स' : 'Bharat Shakti Pulse'}
+        </h2>
+        <p class="text-[10px] text-slate-500 font-mono">Live Sovereign Wire</p>
       </div>
     </div>
-    <p class="text-xs text-slate-400 max-w-2xl">No source-reviewed milestone is configured yet. Source-attributed reporting will appear here after editorial review and publication.</p>
-    <div class="text-xs font-mono text-slate-400 border-l border-amber-900/40 pl-4">
-      <span class="block text-[10px] uppercase tracking-wider">Published articles</span>
-      <strong class="text-amber-300 tabular-nums">{stats.total_published}</strong>
+
+    <div class="flex-grow max-w-3xl overflow-hidden text-ellipsis whitespace-nowrap">
+      {latestArticle ? (
+        <a href={`/articles/${latestArticle.id}`} class="text-xs text-slate-200 hover:text-amber-300 font-medium transition-colors flex items-center gap-2 group">
+          <span class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/40 font-bold uppercase shrink-0">
+            {latestArticle.category}
+          </span>
+          <span class="truncate group-hover:underline">
+            {language === 'hi' && latestArticle.title_hi ? latestArticle.title_hi : latestArticle.title}
+          </span>
+          <span class="text-amber-400 text-[10px] font-mono shrink-0">वाचनम् ↗</span>
+        </a>
+      ) : (
+        <p class="text-xs text-slate-400">Continuous sovereign intelligence monitoring active across all Bhartiya corridors.</p>
+      )}
+    </div>
+
+    <div class="text-xs font-mono text-slate-400 border-l border-amber-900/40 pl-4 shrink-0 flex items-center gap-3">
+      <div>
+        <span class="block text-[10px] uppercase tracking-wider text-slate-500">Published Wire</span>
+        <strong class="text-emerald-400 tabular-nums">{stats.total_published}</strong>
+      </div>
+      <a href="/news" class="px-2.5 py-1 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 text-[11px] font-bold transition-colors">
+        All Wire →
+      </a>
     </div>
   </div>
 </section>
