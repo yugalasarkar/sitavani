@@ -120,18 +120,47 @@ function extractImageUrl(itemBlock) {
   return null;
 }
 
+function isDeepCivilizationalNews(text, sourceName) {
+  const combined = `${text} ${sourceName}`.toLowerCase();
+  
+  // 1. Strict Geographic & Geopolitical Exclusion:
+  // Reject foreign Middle Eastern conflicts, Israel/Iran/Gaza/Houthi politics, foreign elections
+  if (/\b(iran|israel|netanyahu|gaza|lebanon|houthi|houthis|yemen|ukraine|russia|knesset|ben-gvir|hezbollah|syria|iraq|tehran|tel aviv|west asia conflict)\b/i.test(combined)) {
+    return false;
+  }
+
+  // Reject foreign religious trivia (e.g. mosques in Iran, internal church disputes)
+  if (/mosque.*closed|church.*wedding|sub-jail|jailbreak|prisons dgp/i.test(combined)) {
+    return false;
+  }
+
+  // 2. Exclude trivial bureaucratic/commercial noise
+  if (
+    /postal stamp|commemorative stamp|audit manual|spectrum auction|gst circular|customs duty on|filing return|tender notice|telecom license|bjp mobile app|membership|bjp e-library|manifesto|chapter \d+/i.test(combined)
+  ) {
+    return false;
+  }
+
+  // Mandatory Sanatan / Bhartiya / Civilisational / Sovereign triggers
+  return (
+    /मंदिर|मन्दिर|तीर्थ|विग्रह|मूर्ति|उत्खनन|पुरातत्व|काशी|अयोध्या|प्रयागराज|संभाजीनगर|धाराशिव|संस्कृति|धर्म|वेद|शास्त्र|धर्मांतरण|वक्फ|हलाल|पुनर्नामकरण|गोरक्षा|हम्पी|भोजशाला|मथुरा|ज्ञानवापी|राष्ट्रवाद|स्वाभिमान|सत्य|सोमनाथ|शबरीमाला/.test(text) ||
+    /\b(mandir|temple|vigraha|murti|sanatana|dharma|hindutva|asi|archaeol|excavation|kashi|ayodhya|mathura|gyanvapi|bhojshala|reclaim|renam|decoloniz|waqf|halal|conversion|cow protection|heritage|inscriptions|shastras|sanskrit|vedas|upanishad|sovereignty|geopolitic|defense|indigenous|isro|somnath|sabarimala)\b/.test(combined) ||
+    /opindia|hindupost|newsbharati|hindu janajagruti|sanatan prabhat|organiser|panchjanya|swarajya|temple connect/.test(sourceName.toLowerCase())
+  );
+}
+
 function determineCategory(text, sourceName = '') {
   const content = (text || '').toLowerCase();
-  const source = (sourceName || '').toLowerCase();
 
+  // 1. MANDIR: Only if content is actually about temples, vigrahas, pujas, teerthas
   if (
-    /मंदिर|मन्दिर|तीर्थ|देवस्थान|गर्भगृह|परिक्रमा|कुण्ड|घाट|पुजारी|महादेव|शिवलिंग|दर्शन|आरती|विष्णु|दुर्गा|हनुमान|रामलला|सोमनाथ|केदारनाथ|बद्रीनाथ|काशी\s*विश्वनाथ|अयोध्या|महाकाल|उज्जैन|मीनाक्षी|तिरुपति|जगन्नाथ|द्वारका|श्रद्धालु|आध्यात्मिक|विग्रह|सबरीमाला/.test(text) ||
-    /\b(mandir|temple|tirth|tirtha|sabarimala|devasthan|sanctum|parikrama|kund|ghat|puja|deity|kashi vishwanath|ayodhya|ram mandir|somnath|kedarnath|badrinath|mahakal|tirupati|jagannath|garbhagriha|pilgrimage|sacred shrine|jyotirlinga|murti|shiva temple|krishna janmabhoomi|gyanvapi)\b/.test(content) ||
-    /sanatan\s*board|temple\s*connect|sanatan\s*wires|hindujagruti/.test(source)
+    /मंदिर|मन्दिर|तीर्थ|देवस्थान|गर्भगृह|परिक्रमा|कुण्ड|घाट|पुजारी|महादेव|शिवलिंग|दर्शन|आरती|विष्णु|दुर्गा|हनुमान|रामलला|सोमनाथ|केदारनाथ|बद्रीनाथ|काशी\s*विश्वनाथ|अयोध्या|महाकाल|उज्जैन|मीनाक्षी|तिरुपति|जगन्नाथ|द्वारका|श्रद्धालु|आध्यात्मिक|विग्रह|सबरीमाला|शबरीमाला/.test(text) ||
+    /\b(mandir|temple|tirth|tirtha|sabarimala|devasthan|sanctum|parikrama|kund|ghat|puja|deity|kashi vishwanath|ayodhya|ram mandir|somnath|kedarnath|badrinath|mahakal|tirupati|jagannath|garbhagriha|pilgrimage|sacred shrine|jyotirlinga|murti|shiva temple|krishna janmabhoomi|gyanvapi|bhojshala)\b/.test(content)
   ) {
     return 'MANDIR';
   }
 
+  // 2. HERITAGE & ITIHASA
   if (
     /इतिहास|पुरातत्व|उत्खनन|धरोहर|शिलालेख|अभिलेख|पुनर्नामकरण|नामकरण|नाम\s*परिवर्तन|ऐतिहासिक|सिंधु\s*घाटी|हड़प्पा|राखीगढ़ी|तंजावुर|चोल|कांस्य|मूर्ति\s*वापसी|प्रयागराज|संभाजीनगर|धाराशिव|विग्रह\s*पुनर्प्राप्ति|संस्कृति|वि-उपनिवेशीकरण/.test(text) ||
     /\b(heritage|archaeol|excavation|inscription|epigraphy|renam|reclaim|decoloniz|monument|chola|repatriat|harappa|rakhigarhi|sudarshana|rudradaman|ancient|civiliz|antiquity|prayagraj|chhatrapati sambhajinagar|dharashiv|historical name|stolen artifact|restored idol|sculpture)\b/.test(content)
@@ -139,24 +168,27 @@ function determineCategory(text, sourceName = '') {
     return 'HERITAGE';
   }
 
+  // 3. NARRATIVE_FACTS
   if (
     /भ्रम|तथ्य|सत्य|झूठ|खंडन|पर्दाफाश|षड्यंत्र|विरोधी|दोगलापन|धर्मांतरण|वक्फ|हलाल|विवाद|अदालत/.test(text) ||
-    /\b(busting|myth|bias|fact-check|investigation|propaganda|fake news|halal|waqf|conversion syndicate|truth behind|exposed|narrative|controversy|court|bench|cji)\b/.test(content) ||
-    /opindia|hindupost/.test(source)
+    /\b(busting|myth|bias|fact-check|investigation|propaganda|fake news|halal|waqf|conversion syndicate|truth behind|exposed|narrative|controversy|court|bench|cji)\b/.test(content)
   ) {
     return 'NARRATIVE_FACTS';
   }
 
+  // 4. SANSKRIT
   if (/वेद|संस्कृत|शास्त्र|स्तोत्र|उपनिषद्|गीता|पुराण|स्मृति|दर्शन|व्याकरण|गुरुकुल|आचार्य/.test(text) ||
       /\b(sanskrit|shastra|veda|vedic|upanishad|gita|purana|gurukula|acharya|mantra|stotra)\b/.test(content)) {
     return 'SANSKRIT';
   }
 
+  // 5. DEFENSE
   if (/सेना|रक्षा|डीआरडीओ|मिसाइल|नौसेना|वायुसेना|अग्नि|ब्रह्मोस|सीमा|सुरक्षा|आईएनएस|सैन्य|परमाणु|सामरिक/.test(text) ||
       /\b(drdo|missile|navy|army|air force|iaf|ins |warship|defense|defence|brahmos|agni|stealth|combat|strategic|border security)\b/.test(content)) {
     return 'DEFENSE';
   }
 
+  // 6. SCIENCE
   if (/इसरो|अंतरिक्ष|उपग्रह|चंद्रयान|गगनयान|परमाणु\s*ऊर्जा|वैज्ञानिक|अनुसंधान/.test(text) ||
       /\b(isro|satellite|spacecraft|chandrayaan|gaganyaan|quantum|semiconductor|supercomputer|atomic energy)\b/.test(content)) {
     return 'SCIENCE';
@@ -177,25 +209,33 @@ function synthesizeSovereignDispatch(title, rawSummary, rawContent, category, so
   const decolonizedTitle = decolonizeText(cleanedTitle);
   let decolonizedSummary = decolonizeText(cleanedSummary);
 
-  // If summary was just the headline, use the first 400 chars of body
-  if (!decolonizedSummary || decolonizedSummary.length < 50 || decolonizedSummary === decolonizedTitle) {
-    if (cleanedBody && cleanedBody.length > 80 && cleanedBody !== decolonizedTitle) {
-      decolonizedSummary = decolonizeText(cleanedBody.slice(0, 480));
+  // Detect if summary is trivial or just the headline repeated
+  const titleWords = cleanedTitle.split(/\s+/).length;
+  const summaryWords = cleanedSummary.split(/\s+/).length;
+
+  if (summaryWords < 25 || summaryWords <= titleWords + 6 || decolonizedSummary.length < 140) {
+    if (cleanedBody && cleanedBody.length > 150 && cleanedBody.split(/\s+/).length > 30) {
+      decolonizedSummary = decolonizeText(cleanedBody.slice(0, 500));
     } else {
-      decolonizedSummary = `Official sovereign civilisational dispatch on ${decolonizedTitle}. Sourced and verified via ${sourceName}. The report underscores ongoing judicial, institutional, and grassroots resurgence safeguarding Sanātana Dharma traditions across Bhāratavarsha.`;
+      decolonizedSummary = `Sovereign intelligence dispatch concerning ${decolonizedTitle}. Verified reports from ${sourceName} reveal critical developments advancing civilisational vigilance, legal accountability, and the institutional defense of Sanātana Dharma traditions across Bhāratavarsha.`;
     }
   }
 
-  // Devanagari prefix & title
+  // Devanagari title formatting
   let devPrefix = 'सनातन-सार्वभौमत्वम्';
-  if (category === 'MANDIR') devPrefix = 'मन्दिर-मुक्ति एवं परम्परा-रक्षा';
+  if (category === 'MANDIR') devPrefix = 'मन्दिर-मर्यादा एवं तीर्थ-रक्षा';
   else if (category === 'HERITAGE') devPrefix = 'सभ्यतागत-पुनरुत्थानम्';
   else if (category === 'NARRATIVE_FACTS') devPrefix = 'सत्य-शोधनम् · धर्म-रक्षा';
-  else if (category === 'DEFENSE') devPrefix = 'राष्ट्र-रक्षा · अजेय-भारतम्';
+  else if (category === 'DEFENSE') devPrefix = 'राष्ट्र-रक्षा एवं सामरिक-विजयः';
   else if (category === 'SANSKRIT') devPrefix = 'वैदिक-शास्त्रीय-प्रवाहः';
 
   const titleEn = decolonizedTitle.length > 250 ? decolonizedTitle.slice(0, 247) + '...' : decolonizedTitle;
-  const titleHi = `${devPrefix}: ${decolonizedTitle}`.slice(0, 290);
+  
+  // If the incoming title is already Devanagari, keep it pure Devanagari
+  const isDevanagari = /[\u0900-\u097F]/.test(decolonizedTitle);
+  const titleHi = isDevanagari 
+    ? `${devPrefix}: ${decolonizedTitle}`.slice(0, 290)
+    : `${devPrefix} [${category}]`.slice(0, 290);
 
   const summaryEn = decolonizedSummary.slice(0, 490);
   const summaryHi = `सनातन धर्म एवं भारत के संप्रभुता-हित में: ${decolonizedSummary}`.slice(0, 490);
@@ -302,9 +342,11 @@ export async function runSovereignCycle() {
       [runId]
     );
 
-    // Fetch active sources
+    // Fetch active sources, prioritizing direct rich RSS feeds over Google News proxies
     const sourcesRes = await client.query(
-      `SELECT id, name, base_url, rss_endpoint FROM sources WHERE is_active = TRUE ORDER BY id ASC`
+      `SELECT id, name, base_url, rss_endpoint FROM sources 
+       WHERE is_active = TRUE 
+       ORDER BY CASE WHEN rss_endpoint LIKE '%google%' THEN 1 ELSE 0 END, id ASC`
     );
     const sources = sourcesRes.rows;
 
