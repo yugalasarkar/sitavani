@@ -209,7 +209,35 @@ function determineCategory(text, sourceName = '') {
   return 'GOVERNANCE';
 }
 
-function synthesizeSovereignDispatch(title, rawSummary, rawContent, category, sourceName) {
+async function translateToEnglish(text) {
+  if (!text) return '';
+  if (!/[\u0900-\u097F]/.test(text)) return text;
+  try {
+    const encoded = encodeURIComponent(text.slice(0, 500));
+    const url = `https://api.mymemory.translated.net/get?q=${encoded}&langpair=hi|en`;
+    const res = await fetch(url, { headers: { 'User-Agent': 'SitavaniSovereign/2.0' } });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.responseData && data.responseData.translatedText) {
+        return data.responseData.translatedText;
+      }
+    }
+  } catch (err) {
+    console.warn('[Translate] Error translating to English:', err.message);
+  }
+  return text;
+}
+
+function sanitizeImageUrl(url) {
+  if (!url) return null;
+  // Exclude known mismatched/generic publisher thumbnails
+  if (/1-104\.webp|default-thumbnail|logo-placeholder/i.test(url)) {
+    return null;
+  }
+  return url;
+}
+
+async function synthesizeSovereignDispatch(title, rawSummary, rawContent, category, sourceName) {
   let cleanedTitle = cleanHtml(title);
   cleanedTitle = cleanedTitle.replace(/\s*-\s*(OpIndia|HinduPost|NewsBharati|Hindu Janajagruti Samiti|Sanatan Prabhat|Organiser|Panchjanya|Swarajya|BJP).*$/i, '').trim();
 
@@ -218,8 +246,23 @@ function synthesizeSovereignDispatch(title, rawSummary, rawContent, category, so
 
   let cleanedBody = cleanHtml(rawContent || rawSummary);
 
-  const decolonizedTitle = decolonizeText(cleanedTitle);
-  let decolonizedSummary = decolonizeText(cleanedSummary);
+  const isDevanagari = /[\u0900-\u097F]/.test(cleanedTitle);
+
+  // If incoming title is Hindi, translate to English for global and national readership
+  let englishTitleSource = cleanedTitle;
+  if (isDevanagari) {
+    englishTitleSource = await translateToEnglish(cleanedTitle);
+  }
+
+  const decolonizedTitle = decolonizeText(englishTitleSource);
+
+  // Translate summary to English if in Hindi
+  let englishSummarySource = cleanedSummary;
+  if (/[\u0900-\u097F]/.test(cleanedSummary)) {
+    englishSummarySource = await translateToEnglish(cleanedSummary.slice(0, 450));
+  }
+
+  let decolonizedSummary = decolonizeText(englishSummarySource);
 
   // Detect if summary is trivial or just the headline repeated
   const titleWords = cleanedTitle.split(/\s+/).length;
@@ -227,7 +270,10 @@ function synthesizeSovereignDispatch(title, rawSummary, rawContent, category, so
 
   if (summaryWords < 25 || summaryWords <= titleWords + 6 || decolonizedSummary.length < 140) {
     if (cleanedBody && cleanedBody.length > 150 && cleanedBody.split(/\s+/).length > 30) {
-      decolonizedSummary = decolonizeText(cleanedBody.slice(0, 500));
+      const translatedBody = /[\u0900-\u097F]/.test(cleanedBody)
+        ? await translateToEnglish(cleanedBody.slice(0, 450))
+        : cleanedBody.slice(0, 500);
+      decolonizedSummary = decolonizeText(translatedBody);
     } else {
       decolonizedSummary = `Sovereign intelligence dispatch concerning ${decolonizedTitle}. Verified reports from ${sourceName} reveal critical developments advancing civilisational vigilance, legal accountability, and the institutional defense of Sanātana Dharma traditions across Bhāratavarsha.`;
     }
@@ -243,11 +289,9 @@ function synthesizeSovereignDispatch(title, rawSummary, rawContent, category, so
 
   const titleEn = decolonizedTitle.length > 250 ? decolonizedTitle.slice(0, 247) + '...' : decolonizedTitle;
   
-  // If the incoming title is already Devanagari, keep it pure Devanagari
-  const isDevanagari = /[\u0900-\u097F]/.test(decolonizedTitle);
   let titleHi = '';
   if (isDevanagari) {
-    titleHi = `${devPrefix}: ${decolonizedTitle}`.slice(0, 290);
+    titleHi = `${devPrefix}: ${cleanedTitle}`.slice(0, 290);
   } else {
     let specificHi = '';
     const lowTitle = decolonizedTitle.toLowerCase();
@@ -274,7 +318,7 @@ function synthesizeSovereignDispatch(title, rawSummary, rawContent, category, so
   }
 
   const summaryEn = decolonizedSummary.slice(0, 490);
-  const summaryHi = `सनातन धर्म एवं भारत के संप्रभुता-हित में: ${decolonizedSummary}`.slice(0, 490);
+  const summaryHi = `सनातन धर्म एवं भारत के संप्रभुता-हित में: ${cleanedSummary.slice(0, 450)}`.slice(0, 490);
 
   const bodyExcerpt = cleanedBody.length > 300 ? cleanedBody : decolonizedSummary;
 
@@ -419,11 +463,12 @@ export async function runSovereignCycle() {
           }
 
           const category = determineCategory(combined, source.name);
-          const dispatch = synthesizeSovereignDispatch(item.title, item.description, item.content, category, source.name);
+          const dispatch = await synthesizeSovereignDispatch(item.title, item.description, item.content, category, source.name);
 
           const articleId = `art-sov-${Date.now()}-${urlHash.slice(0, 6)}`;
           const now = new Date();
           const itemCreatedAt = item.pubDate || now;
+          const safeImageUrl = sanitizeImageUrl(item.imageUrl);
 
           // Insert into PENDING status for admin 1-click approval
           await client.query(
@@ -449,7 +494,7 @@ export async function runSovereignCycle() {
               dispatch.summaryEn,
               dispatch.summaryHi,
               dispatch.contentRaw,
-              item.imageUrl || null,
+              safeImageUrl,
               category,
               itemCreatedAt,
               now,
