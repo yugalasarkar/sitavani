@@ -2,6 +2,7 @@ import type { APIRoute } from 'astro';
 import { executeAction } from '../../../../data/store';
 import { protectAdminRequest } from '../../../../lib/adminAuth';
 import { dataErrorResponse, jsonError, jsonResponse } from '../../../../lib/api';
+import { broadcastToTelegram } from '../../../../lib/syndication';
 
 const validActions = new Set(['APPROVE', 'UPDATE_AND_APPROVE', 'PUBLISH', 'DISCARD', 'UNPUBLISH']);
 const validCategories = new Set(['HERITAGE', 'MANDIR', 'DEFENSE', 'SCIENCE', 'SANSKRIT', 'GOVERNANCE', 'NARRATIVE_FACTS', 'GENERAL']);
@@ -47,7 +48,21 @@ export const POST: APIRoute = async ({ request }) => {
       return jsonError(result.error, result.status || 400);
     }
 
-    return jsonResponse(result);
+    // Trigger Telegram broadcast upon publishing / approving
+    let telegramResult = null;
+    if (result.success && result.article && result.article.status === 'PUBLISHED') {
+      try {
+        telegramResult = await broadcastToTelegram(result.article);
+      } catch (tgErr: any) {
+        console.error('Failed to broadcast to Telegram:', tgErr);
+        telegramResult = { success: false, error: tgErr?.message };
+      }
+    }
+
+    return jsonResponse({
+      ...result,
+      telegram: telegramResult
+    });
   } catch (error) {
     return dataErrorResponse(error);
   }

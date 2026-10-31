@@ -251,8 +251,9 @@ export class PostgresNewsRepository implements NewsRepository {
 
       if (input.action === 'APPROVE' || input.action === 'UPDATE_AND_APPROVE') {
         if (article.status !== 'PENDING') return { error: 'Only pending articles can be approved.', status: 409 };
-        nextStatus = 'APPROVED';
+        nextStatus = 'PUBLISHED';
         approvedAt = now.toISOString();
+        publishedAt = approvedAt;
         reviewedAt = approvedAt;
         if (input.action === 'UPDATE_AND_APPROVE') {
           if (input.modified_title !== undefined) article.title = input.modified_title;

@@ -11,14 +11,15 @@ export const POST: APIRoute = async ({ request }) => {
   if (denied) return denied;
 
   try {
-    const { stdout } = await execFileAsync('/usr/bin/node', ['/var/www/sitavani/scripts/ingest_worker.mjs'], {
-      timeout: 45000,
+    const nodeBin = process.execPath || '/home/ubuntu/.nvm/versions/node/v22.23.4/bin/node';
+    const { stdout } = await execFileAsync(nodeBin, ['/var/www/sitavani/scripts/sovereign_ai_ingest.mjs'], {
+      timeout: 60000,
       env: process.env
     });
 
     return jsonResponse({
       success: true,
-      message: 'Ingestion cycle executed successfully.',
+      message: 'Sovereign right-wing ingestion pulse completed successfully.',
       output: stdout
     });
   } catch (err: any) {

@@ -333,11 +333,18 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     setActingArticleId(id);
     setActionFeedback(null);
     try {
-      await adminRequest('/api/admin/articles/action', {
+      const res = await adminRequest('/api/admin/articles/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ article_id: id, action })
       });
+      const data = await res.json();
+      if (action === 'APPROVE') {
+        const tgMsg = data?.telegram?.success ? ' ✈️ Broadcasted to Telegram @sitavani' : '';
+        setActionFeedback({ kind: 'success', message: `Dispatch approved and published live.${tgMsg}` });
+      } else {
+        setActionFeedback({ kind: 'success', message: 'Dispatch discarded successfully.' });
+      }
       await fetchPending();
       onRefreshStats?.();
       fetchLogs();
@@ -364,7 +371,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
     setActingArticleId(id);
     setActionFeedback(null);
     try {
-      await adminRequest('/api/admin/articles/action', {
+      const res = await adminRequest('/api/admin/articles/action', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -378,6 +385,9 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
           editorial_notes: editNotes
         })
       });
+      const data = await res.json();
+      const tgMsg = data?.telegram?.success ? ' ✈️ Broadcasted to Telegram @sitavani' : '';
+      setActionFeedback({ kind: 'success', message: `Dispatch updated and published live.${tgMsg}` });
       setEditingArticle(null);
       await fetchPending();
       onRefreshStats?.();
@@ -715,6 +725,17 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                 <strong className="text-emerald-400 tabular-nums">{archiveArticles.length > 0 ? archiveArticles.length : '33+'}</strong>
                 <span className="text-[10px] text-amber-400">(View All Archive →)</span>
               </button>
+              <span>•</span>
+              <a
+                href="https://t.me/sitavani"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-950/80 border border-sky-500/40 text-sky-300 hover:text-sky-200 text-[11px] font-sans font-semibold transition-colors"
+                title="SITAVANI Telegram Sovereign Channel"
+              >
+                <span>✈️</span>
+                <span>@sitavani Wire</span>
+              </a>
             </div>
           </div>
 
