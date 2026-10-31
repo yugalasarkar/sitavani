@@ -1076,7 +1076,7 @@ export const AdminDesk: React.FC<AdminDeskProps> = ({
                         <span className="text-slate-500">•</span>
                         <span className="text-slate-400">{article.source_name}</span>
                         <span className="text-slate-600">•</span>
-                        <span className="text-slate-500">{new Date(article.published_at).toLocaleString()}</span>
+                        <span className="text-slate-500">{new Date(article.published_at || article.created_at || Date.now()).toLocaleString()}</span>
                       </div>
 
                       <h3 className="text-base sm:text-lg font-bold font-serif text-slate-100">

@@ -121,34 +121,44 @@ function extractImageUrl(itemBlock) {
 }
 
 function isDeepCivilizationalNews(text, sourceName) {
-  const combined = `${text} ${sourceName}`.toLowerCase();
+  const combinedExclusions = `${text} ${sourceName}`.toLowerCase();
   
   // 1. Strict Geographic & Geopolitical Exclusion:
   // Reject foreign Middle Eastern conflicts, Israel/Iran/Gaza/Houthi politics, foreign elections
-  if (/\b(iran|israel|netanyahu|gaza|lebanon|houthi|houthis|yemen|ukraine|russia|knesset|ben-gvir|hezbollah|syria|iraq|tehran|tel aviv|west asia conflict)\b/i.test(combined)) {
+  if (/\b(iran|tehran|israel|tel aviv|netanyahu|knesset|ben-gvir|gaza|palestine|hamas|hezbollah|lebanon|beirut|yemen|houthi|houthis|syria|damascus|iraq|baghdad|ukraine|kyiv|zelensky|russia|moscow|putin|brazil|lula|italian|italy|meloni|us election|trump|biden|kamala|taiwan|china-philippines|west asia conflict)\b/i.test(combinedExclusions)) {
     return false;
   }
 
-  // Reject foreign religious trivia (e.g. mosques in Iran, internal church disputes)
-  if (/mosque.*closed|church.*wedding|sub-jail|jailbreak|prisons dgp/i.test(combined)) {
+  // 2. Reject Graphic Crimes, Sexual Violence, Brutality, and Gore (NO CRIME BLOTTER):
+  if (/\b(rape|raped|rapist|gangrape|molest|pocso|murder|murdered|killer|homicide|hanged till death|electric saw|beheaded|throat slit|hacked to death|stabbed|suicide|corpse|dead body|mutilat|child abuse|pedophile|domestic violence)\b/i.test(combinedExclusions)) {
     return false;
   }
 
-  // 2. Exclude trivial bureaucratic/commercial noise
+  // 3. Reject Sordid Scandals, Petty Crimes, Vice, and Defeatist Whining:
+  if (/\b(scam|extortion|bribe|liquor|alcohol|drunk|cockroach|weed|cannabis|narcotics|drug peddler|prostitution|quarrel|jailbreak|sub-jail|prisons dgp|theft beneath|underneath a cow-dung|vendor arrested|domestic workers detained|hit and run|car crash|accident|traffic challan|how long will sanatanis remain asleep|eighth class citizens|victim card|plight of hindus|helpless|pathetic condition|humiliation|smoking|dental|hospital|pyare khan|jail bharo)\b/i.test(combinedExclusions)) {
+    return false;
+  }
+
+  // 4. Reject foreign religious trivia & internal petty sectarian disputes
+  if (/mosque.*closed|church.*wedding|pastor arrested|madrasa curriculum|fatwa/i.test(combinedExclusions)) {
+    return false;
+  }
+
+  // 5. Exclude trivial bureaucratic/commercial noise & party political bickering
   if (
-    /postal stamp|commemorative stamp|audit manual|spectrum auction|gst circular|customs duty on|filing return|tender notice|telecom license|bjp mobile app|membership|bjp e-library|manifesto|chapter \d+/i.test(combined)
+    /postal stamp|commemorative stamp|audit manual|spectrum auction|gst circular|customs duty on|filing return|tender notice|telecom license|bjp mobile app|membership|bjp e-library|manifesto|chapter \d+|sarcastic trolling|amruta fadnavis|naseeruddin|diljit dosanjh|rahul baba|jio ipo/i.test(combinedExclusions)
   ) {
     return false;
   }
 
-  // 3. MANDATORY BHARAT-FIRST CIVILISATIONAL RULE:
-  // Must strictly belong to the sacred geography, civilization, security, and heritage of Bhārat
-  const hasDevanagariTriggers = /भारत|सनातन|धर्म|हिंदू|हिन्दू|मंदिर|मन्दिर|तीर्थ|विग्रह|मूर्ति|उत्खनन|पुरातत्व|काशी|अयोध्या|प्रयागराज|संभाजीनगर|धाराशिव|संस्कृति|वेद|शास्त्र|धर्मांतरण|वक्फ|हलाल|पुनर्नामकरण|गोरक्षा|हम्पी|भोजशाला|मथुरा|ज्ञानवापी|राष्ट्रवाद|स्वाभिमान|सत्य|सोमनाथ|शबरीमाला|असम|कश्मीर|उत्तराखंड|गुजरात|महाराष्ट्र|तमिलनाडु|केरल|उत्तर\s*प्रदेश/.test(text);
+  // 6. MANDATORY POSITIVE CIVILISATIONAL & SOVEREIGN TRIUMPH:
+  // Must positively affirm Mandir restoration, Vedic heritage, archaeological discoveries, defense supremacy, scientific breakthroughs, or dharmic resurgence!
+  // CRITICAL: Tested strictly against ARTICLE TEXT (not source name!)
+  const hasPositiveDevanagari = /भव्य|गौरव|विजय|प्रतिष्ठा|उत्सव|दीपावली|दीपोत्सव|विजयादशमी|शस्त्र\s*पूजन|तीर्थ|मंदिर|मन्दिर|महाकुंभ|कुंभ|काशी|अयोध्या|सोमनाथ|केदारनाथ|बद्रीनाथ|शबरीमाला|विग्रह|पुरातत्व|उत्खनन|शिलालेख|अभिलेख|वेद|उपनिषद्|संस्कृत|शास्त्र|गुरुकुल|डीआरडीओ|इसरो|मिसाइल|अग्नि|ब्रह्मोस|नौसेना|वायुसेना|सैन्य|सुरक्षा|गोरक्षा|संप्रभुता|पुनर्नामकरण/.test(text);
 
-  const hasEnglishTriggers = /\b(bharat|bhārat|sanatana|sanātana|dharma|dharmic|hindu|hindutva|mandir|temple|tirth|tirtha|vigraha|murti|deity|ayodhya|kashi|varanasi|mathura|gyanvapi|bhojshala|somnath|sabarimala|prayagraj|chhatrapati sambhajinagar|dharashiv|asi|archaeol|excavation|vedas|vedic|upanishad|sanskrit|shastras|hampi|decoloniz|reclaim|ram mandir|waqf|halal|conversion|cow protection|drdo|isro|iaf|ins |indian navy|indian army|assam|kashmir|uttarakhand|gujarat|maharashtra|tamil nadu|kerala|uttar pradesh|supreme court of india|cji)\b/.test(combined);
+  const hasPositiveEnglish = /\b(grand|celebrat|record|diwali|deepotsav|vijayadashami|shastra puja|consecrat|mandir|temple|pilgrimag|tirth|tirtha|vigraha|pran pratishtha|kashi|ayodhya|mathura|somnath|kedarnath|badrinath|sabarimala|tirupati|jagannath|asi|archaeol|excavation|inscription|epigraphy|chola|saraswati|harappa|repatriat|restor|decoloniz|reclaim|sanskrit|veda|vedic|upanishad|gurukul|drdo|brahmos|agni|missile|ins |navy|air force|iaf|army|defense|defence|isro|chandrayaan|gaganyaan|space|quantum|semiconductor|gau raksha|cow protection|heritage|sovereign|renaissance|resurgence|triumph)\b/i.test(text);
 
-  // If it is not explicitly anchored in Bhārat or Sanātana Dharma, REJECT unconditionally!
-  return hasDevanagariTriggers || hasEnglishTriggers;
+  return hasPositiveDevanagari || hasPositiveEnglish;
 }
 
 function determineCategory(text, sourceName = '') {
@@ -235,9 +245,33 @@ function synthesizeSovereignDispatch(title, rawSummary, rawContent, category, so
   
   // If the incoming title is already Devanagari, keep it pure Devanagari
   const isDevanagari = /[\u0900-\u097F]/.test(decolonizedTitle);
-  const titleHi = isDevanagari 
-    ? `${devPrefix}: ${decolonizedTitle}`.slice(0, 290)
-    : `${devPrefix} [${category}]`.slice(0, 290);
+  let titleHi = '';
+  if (isDevanagari) {
+    titleHi = `${devPrefix}: ${decolonizedTitle}`.slice(0, 290);
+  } else {
+    let specificHi = '';
+    const lowTitle = decolonizedTitle.toLowerCase();
+    if (/ayodhya|diwali|deepotsav/.test(lowTitle)) {
+      specificHi = 'अयोध्या धाम: भव्य दीपोत्सव एवं सनातन विश्व-कीर्तिमान';
+    } else if (/somnath|kashi|kedarnath|badrinath|sabarimala|tirupati|mathura/.test(lowTitle)) {
+      specificHi = 'पवित्र तीर्थ-क्षेत्र एवं मन्दिर-परम्परा का दिव्य संरक्षण';
+    } else if (/mandir|temple|vigraha|shrine/.test(lowTitle)) {
+      specificHi = 'मन्दिर-पुनरुद्धार एवं सनातन देवस्थान की रक्षा';
+    } else if (/asi|archaeol|excavat|ancient|epigraph/.test(lowTitle)) {
+      specificHi = 'पुरातत्व-साक्ष्य: वैदिक सभ्यता की प्राचीनता का ऐतिहासिक प्रमाण';
+    } else if (/drdo|brahmos|agni|missile|navy|army|air force|defense/.test(lowTitle)) {
+      specificHi = 'अजेय भारत: सामरिक सुरक्षा एवं स्वदेशी रक्षा-प्रणाली का पराक्रम';
+    } else if (/isro|space|satellite|chandrayaan/.test(lowTitle)) {
+      specificHi = 'भारतीय ज्ञान-विज्ञान: अन्तरिक्ष में भारत का ऐतिहासिक विजय-अभियान';
+    } else if (/cow|gau|slaughter/.test(lowTitle)) {
+      specificHi = 'गो-रक्षा एवं धर्म-मर्यादा: भारतीय न्यायपालिका का ऐतिहासिक निर्णय';
+    } else if (/shastra|puja|vijayadashami|sanskrit|veda/.test(lowTitle)) {
+      specificHi = 'शस्त्र-पूजन एवं शास्त्रीय मर्यादा: राष्ट्र-चेतना का पुनर्जागरण';
+    } else {
+      specificHi = `${devPrefix} [${category}]`;
+    }
+    titleHi = `${devPrefix} · ${specificHi}`.slice(0, 290);
+  }
 
   const summaryEn = decolonizedSummary.slice(0, 490);
   const summaryHi = `सनातन धर्म एवं भारत के संप्रभुता-हित में: ${decolonizedSummary}`.slice(0, 490);
@@ -316,6 +350,7 @@ function parseFeedItems(xml) {
     const linkMatch = itemBlock.match(/<link(?:\s[^>]*)?>([\s\S]*?)<\/link>/i) || itemBlock.match(/<guid[^>]*>([\s\S]*?)<\/guid>/i);
     const descMatch = itemBlock.match(/<description(?:\s[^>]*)?>([\s\S]*?)<\/description>/i);
     const contentMatch = itemBlock.match(/<content:encoded(?:\s[^>]*)?>([\s\S]*?)<\/content:encoded>/i);
+    const pubDateMatch = itemBlock.match(/<(?:pubDate|dc:date)[^>]*>([\s\S]*?)<\/(?:pubDate|dc:date)>/i);
 
     const title = cleanHtml(titleMatch ? titleMatch[1] : '');
     const link = (linkMatch ? linkMatch[1] : '').replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1').trim();
@@ -323,8 +358,16 @@ function parseFeedItems(xml) {
     const content = cleanHtml(contentMatch ? contentMatch[1] : description);
     const imageUrl = extractImageUrl(itemBlock);
 
+    let pubDate = new Date();
+    if (pubDateMatch) {
+      const parsed = new Date(pubDateMatch[1].trim());
+      if (!isNaN(parsed.getTime())) {
+        pubDate = parsed;
+      }
+    }
+
     if (title && link) {
-      items.push({ title, link, description, content, imageUrl });
+      items.push({ title, link, description, content, imageUrl, pubDate });
     }
   }
   return items;
@@ -368,11 +411,19 @@ export async function runSovereignCycle() {
           if (exists.rows.length > 0) continue;
 
           const combined = `${item.title} ${item.description} ${item.content}`;
+
+          // MANDATORY POSITIVE CIVILISATIONAL GATE:
+          // Strictly reject gore, crimes, scandals, whining, foreign geopolitics!
+          if (!isDeepCivilizationalNews(combined, source.name)) {
+            continue;
+          }
+
           const category = determineCategory(combined, source.name);
           const dispatch = synthesizeSovereignDispatch(item.title, item.description, item.content, category, source.name);
 
           const articleId = `art-sov-${Date.now()}-${urlHash.slice(0, 6)}`;
           const now = new Date();
+          const itemCreatedAt = item.pubDate || now;
 
           // Insert into PENDING status for admin 1-click approval
           await client.query(
@@ -385,7 +436,7 @@ export async function runSovereignCycle() {
               $1, $2, $3, $4, $5,
               $6, $7, $8, $9, $10,
               $11, $12, 'PENDING', 'FEATURE',
-              $13, $13, $14
+              $13, $14, $15
             )`,
             [
               articleId,
@@ -400,6 +451,7 @@ export async function runSovereignCycle() {
               dispatch.contentRaw,
               item.imageUrl || null,
               category,
+              itemCreatedAt,
               now,
               ['sanatana', 'sovereign', 'dharma', category.toLowerCase(), 'vishwaguru']
             ]
