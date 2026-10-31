@@ -97,11 +97,29 @@ function cleanHtml(html) {
     .replace(/&#39;/g, "'")
     .replace(/&apos;/g, "'")
     .replace(/&nbsp;/g, ' ')
+    .replace(/&#8230;/g, '...')
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
     .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)));
 
   str = str.replace(/<[^>]*>/g, ' ');
+  str = str.replace(/\[\s*(?:\.\.\.|…|&#8230;)\s*\]/g, ''); // Strip WordPress [...] truncation
+  str = str.replace(/\s*…\s*$/, '');
+  str = str.replace(/\s*\.\.\.\s*$/, '');
   return str.replace(/\s+/g, ' ').trim();
+}
+
+function extractCompleteSentences(text, maxChars = 450) {
+  if (!text) return '';
+  const clean = text.replace(/\[\s*(?:\.\.\.|…|&#8230;)\s*\]/g, '').trim();
+  const sentences = clean.match(/[^.!?।]+[.!?।]+/g);
+  if (!sentences || sentences.length === 0) return clean.slice(0, maxChars);
+  
+  let result = '';
+  for (const s of sentences) {
+    if ((result + s).length > maxChars && result.length > 80) break;
+    result += s + ' ';
+  }
+  return result.trim();
 }
 
 function extractImageUrl(itemBlock) {
@@ -256,10 +274,14 @@ async function synthesizeSovereignDispatch(title, rawSummary, rawContent, catego
 
   const decolonizedTitle = decolonizeText(englishTitleSource);
 
+  // Prefer complete sentences from cleanedBody over truncated description excerpt
+  const sourceText = (cleanedBody && cleanedBody.length > cleanedSummary.length + 30) ? cleanedBody : cleanedSummary;
+  const completeSentenceExcerpt = extractCompleteSentences(sourceText, 450);
+
   // Translate summary to English if in Hindi
-  let englishSummarySource = cleanedSummary;
-  if (/[\u0900-\u097F]/.test(cleanedSummary)) {
-    englishSummarySource = await translateToEnglish(cleanedSummary.slice(0, 450));
+  let englishSummarySource = completeSentenceExcerpt;
+  if (/[\u0900-\u097F]/.test(completeSentenceExcerpt)) {
+    englishSummarySource = await translateToEnglish(completeSentenceExcerpt);
   }
 
   let decolonizedSummary = decolonizeText(englishSummarySource);
@@ -453,6 +475,14 @@ export async function runSovereignCycle() {
           // Check if already in DB
           const exists = await client.query('SELECT 1 FROM articles WHERE url_hash = $1', [urlHash]);
           if (exists.rows.length > 0) continue;
+
+          // STRICT RECENCY GATE: Must be published within the last 48 hours
+          if (item.pubDate) {
+            const ageHours = (Date.now() - item.pubDate.getTime()) / (1000 * 60 * 60);
+            if (ageHours > 48) {
+              continue; // Skip stale historical news
+            }
+          }
 
           const combined = `${item.title} ${item.description} ${item.content}`;
 
